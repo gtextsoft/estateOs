@@ -252,12 +252,75 @@ export function mapPresenceDoc(doc: Json, subjectCode: string): [string, Securit
 
 // ——— Auth ———
 
-export async function loginRequest(body: {
+export async function loginEmailRequest(body: { email: string; password: string }) {
+  const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(body) });
+  return readJson<{
+    ok: boolean;
+    token: string;
+    userId: string;
+    role: string;
+    residentId?: string;
+    estateId?: string;
+    kycStatus?: string;
+    estateStatus?: string;
+    legacy?: boolean;
+  }>(res);
+}
+
+/** Legacy demo login (resident code or guard/manager demo subjects). */
+export async function loginLegacyRequest(body: {
   role: "resident" | "guard" | "manager";
   residentCode?: string;
 }) {
   const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(body) });
-  return readJson<{ ok: boolean; token: string; userId: string; role: string }>(res);
+  return readJson<{ ok: boolean; token: string; userId: string; role: string; legacy?: boolean }>(res);
+}
+
+export async function registerEstateRequest(body: {
+  name: string;
+  slug: string;
+  email: string;
+  password: string;
+  managerName?: string;
+}) {
+  const res = await apiFetch("/auth/register-estate", { method: "POST", body: JSON.stringify(body) });
+  return readJson<{
+    ok: boolean;
+    token: string;
+    userId: string;
+    role: string;
+    estateId: string;
+    estateStatus: string;
+  }>(res);
+}
+
+export async function signupRequest(body: {
+  role: "resident" | "guard";
+  estateSlug: string;
+  email: string;
+  password: string;
+  name?: string;
+  unit?: string;
+  building?: string;
+  block?: string;
+  phone?: string;
+  kyc?: { fullName?: string; phone?: string; nationalIdOrPassport?: string; notes?: string };
+}) {
+  const res = await apiFetch("/auth/signup", { method: "POST", body: JSON.stringify(body) });
+  return readJson<{
+    ok: boolean;
+    token: string;
+    userId: string;
+    role: string;
+    residentId?: string;
+    estateId: string;
+    kycStatus?: string;
+  }>(res);
+}
+
+export async function resolveEstateSlug(slug: string) {
+  const res = await apiFetch(`/estates/resolve?slug=${encodeURIComponent(slug)}`);
+  return readJson<{ ok: boolean; estate: { id: string; name: string; slug: string } }>(res);
 }
 
 export async function logoutRequest() {
@@ -267,7 +330,93 @@ export async function logoutRequest() {
 
 export async function meRequest() {
   const res = await apiFetch("/auth/me");
-  return readJson<{ ok: boolean; user: { id: string; role: string } }>(res);
+  return readJson<{
+    ok: boolean;
+    user: {
+      id: string;
+      userId?: string;
+      role: string;
+      email?: string;
+      kycStatus?: string;
+      estate?: { name?: string; slug?: string; status?: string };
+      legacy?: boolean;
+    };
+  }>(res);
+}
+
+// ——— Platform admin ———
+
+export type PlatformEstateRow = {
+  estate: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    createdAt?: string;
+    reviewNote?: string;
+  };
+  manager: { id: string; email: string; kycStatus?: string } | null;
+  residentCount: number;
+};
+
+export async function fetchPlatformSummary() {
+  const res = await apiFetch("/platform/summary");
+  return readJson<{
+    ok: boolean;
+    summary: {
+      estates: { pending: number; active: number; suspended: number; total: number };
+      users: { managers: number; guards: number };
+      residents: number;
+    };
+  }>(res);
+}
+
+export async function fetchPlatformEstates(status?: "pending" | "active" | "suspended") {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await apiFetch(`/platform/estates${q}`);
+  const data = await readJson<{ ok: boolean; items: PlatformEstateRow[] }>(res);
+  return data.items;
+}
+
+export async function fetchPlatformPendingEstates() {
+  const res = await apiFetch("/platform/estates/pending");
+  const data = await readJson<{ ok: boolean; items: PlatformEstateRow[] }>(res);
+  return data.items;
+}
+
+export async function patchPlatformEstate(
+  estateId: string,
+  input: {
+    action: "approve" | "reject" | "suspend" | "reactivate";
+    note?: string;
+  },
+) {
+  const res = await apiFetch(`/platform/estates/${encodeURIComponent(estateId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+/** Approve or reject a pending estate registration. */
+export async function reviewPlatformEstate(estateId: string, action: "approve" | "reject", note?: string) {
+  return patchPlatformEstate(estateId, { action, note });
+}
+
+// ——— Admin KYC ———
+
+export async function fetchAdminKycPending() {
+  const res = await apiFetch("/admin/kyc/pending");
+  const data = await readJson<{ ok: boolean; users: Json[] }>(res);
+  return data.users;
+}
+
+export async function reviewAdminKyc(userId: string, action: "approve" | "reject", note?: string) {
+  const res = await apiFetch(`/admin/kyc/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action, note }),
+  });
+  return readJson(res);
 }
 
 // ——— Resident (/me) ———

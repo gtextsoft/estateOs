@@ -1,59 +1,101 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Shield, User, Users } from "lucide-react";
+import { User } from "lucide-react";
 
-import { loginRequest } from "@/lib/estate-api";
+import { loginEmailRequest, loginLegacyRequest } from "@/lib/estate-api";
 import { isApiMode, setSession } from "@/lib/session";
 
-const roles = [
-  {
-    key: "resident",
-    title: "Resident",
-    desc: "Invite visitors, get arrival alerts, manage access passes.",
-    icon: User,
-  },
-  {
-    key: "guard",
-    title: "Security Guard",
-    desc: "Scan QR passes, approve/deny entry, log incidents fast.",
-    icon: Shield,
-  },
-  {
-    key: "manager",
-    title: "Estate Manager",
-    desc: "Manage residents, reports, payments, and security oversight.",
-    icon: Users,
-  },
-] as const;
+function routeAfterLogin(input: {
+  role: string;
+  kycStatus?: string;
+  estateStatus?: string;
+}) {
+  if (input.role === "platform_admin") return "/platform";
+  if (input.role === "manager" && input.estateStatus === "pending") return "/pending-estate";
+  if (
+    (input.role === "resident" || input.role === "guard") &&
+    input.kycStatus === "submitted"
+  ) {
+    return "/pending-kyc";
+  }
+  if (input.role === "resident") return "/residents";
+  if (input.role === "guard") return "/security";
+  if (input.role === "manager") return "/dashboard";
+  return "/login";
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [residentCode, setResidentCode] = useState(
     () => process.env.NEXT_PUBLIC_DEMO_RESIDENT_CODE || "RES-A01",
   );
+  const [showLegacy, setShowLegacy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const go = async (r: (typeof roles)[number]["key"]) => {
+  const emailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      if (isApiMode()) {
-        const res = await loginRequest({
-          role: r,
-          ...(r === "resident" ? { residentCode: residentCode.trim() } : {}),
-        });
-        setSession({ token: res.token, userId: res.userId, role: res.role });
+      if (!isApiMode()) {
+        setError("NEXT_PUBLIC_API_URL is not set");
+        return;
       }
-      document.cookie = `estateos_role=${r}; path=/; max-age=${60 * 60 * 24 * 30}`;
-      if (r === "resident") router.push("/residents");
-      else if (r === "guard") router.push("/security");
-      else router.push("/dashboard");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed");
+      const res = await loginEmailRequest({ email: email.trim(), password });
+      setSession({
+        token: res.token,
+        userId: res.userId,
+        role: res.role,
+        residentId: res.residentId,
+      });
+      document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}`;
+      const nextParam =
+        typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
+      const dest =
+        nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+          ? nextParam
+          : routeAfterLogin({
+              role: res.role,
+              kycStatus: res.kycStatus,
+              estateStatus: res.estateStatus,
+            });
+      router.push(dest);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const legacyResident = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      if (!isApiMode()) {
+        setError("NEXT_PUBLIC_API_URL is not set");
+        return;
+      }
+      const res = await loginLegacyRequest({
+        role: "resident",
+        residentCode: residentCode.trim(),
+      });
+      setSession({
+        token: res.token,
+        userId: res.userId,
+        role: res.role,
+        residentId: res.userId,
+      });
+      document.cookie = `estateos_role=resident; path=/; max-age=${60 * 60 * 24 * 30}`;
+      router.push("/residents");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
       setLoading(false);
     }
@@ -82,10 +124,10 @@ export default function LoginPage() {
               Secure smart estate operating system
             </p>
             <h1 className="font-display text-4xl font-bold text-primary-foreground leading-tight">
-              Choose your workspace role.
+              Sign in with your account.
             </h1>
             <p className="mt-4 text-primary-foreground/80 text-lg leading-relaxed">
-              Security-first access control and luxury-grade UX—built for residents, guards, and managers.
+              Email and password for residents, guards, managers, and platform admins.
             </p>
           </div>
         </div>
@@ -93,69 +135,126 @@ export default function LoginPage() {
 
       <div className="w-full lg:w-[480px] bg-card border-l border-border flex flex-col justify-center px-6 py-14 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
-          <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">
-            Sign in
-          </p>
-          <h2 className="font-display text-3xl font-bold text-foreground mb-2">
-            Select a role
-          </h2>
-          <p className="text-muted-foreground mb-8">
-            This controls your dashboard experience. You can change it later.
+          <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">Sign in</p>
+          <h2 className="font-display text-3xl font-bold text-foreground mb-2">Welcome back</h2>
+          <p className="text-muted-foreground mb-6">
+            New here?{" "}
+            <Link href="/signup" className="text-primary font-medium hover:underline">
+              Create an account
+            </Link>{" "}
+            ·{" "}
+            <Link href="/register-estate" className="text-primary font-medium hover:underline">
+              Register an estate
+            </Link>
           </p>
 
           {isApiMode() && (
-            <div className="mb-6 rounded-xl border border-border bg-muted/30 p-4 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Backend API
+            <form onSubmit={(e) => void emailLogin(e)} className="space-y-4 mb-6">
+              <p className="text-xs text-muted-foreground">
+                API: <span className="font-mono text-foreground">{process.env.NEXT_PUBLIC_API_URL}</span>
               </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Connected to <span className="font-mono text-foreground">{process.env.NEXT_PUBLIC_API_URL}</span>.
-                Residents must enter the estate-issued resident code (seed example: RES-A01).
-              </p>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3">
-                Resident code
-              </label>
-              <input
-                value={residentCode}
-                onChange={(e) => setResidentCode(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="RES-A01"
-                autoComplete="off"
-              />
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {roles.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                disabled={loading}
-                className="w-full text-left bg-background rounded-xl border border-border p-4 shadow-soft hover:shadow-card transition-shadow disabled:opacity-60"
-                onClick={() => void go(r.key)}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="h-11 w-11 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <r.icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-display text-lg font-semibold text-foreground">
-                      {r.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {r.desc}
-                    </p>
-                  </div>
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  required
+                />
+              </div>
+              {error && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
                 </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:opacity-95 disabled:opacity-60"
+              >
+                {loading ? "Signing in…" : "Sign in"}
               </button>
-            ))}
-          </div>
+              <p className="text-xs text-center text-muted-foreground">
+                Platform admin: sign in below, then you&apos;ll be redirected to{" "}
+                <Link href="/platform" className="text-primary hover:underline">
+                  /platform
+                </Link>{" "}
+                automatically.
+              </p>
+              <details className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 p-3">
+                <summary className="cursor-pointer font-medium text-foreground">Local demo passwords (after npm run seed)</summary>
+                <ul className="mt-2 space-y-1.5 list-disc pl-4 font-mono">
+                  <li>platform@estateos.local / PlatformAdmin123!</li>
+                  <li>manager@estateos.local / Manager123!</li>
+                  <li>guard@estateos.local / Guard123!</li>
+                  <li>adaeze@estateos.io / Resident123!</li>
+                </ul>
+              </details>
+            </form>
+          )}
+
+          {isApiMode() && (
+            <div className="border-t border-border pt-6">
+              <button
+                type="button"
+                onClick={() => setShowLegacy((s) => !s)}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                {showLegacy ? "Hide" : "Show"} legacy demo login (resident code)
+              </button>
+              {showLegacy && (
+                <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Resident-only: JWT uses resident id as sub (no User row). Use email login for guard/manager
+                    (seed accounts).
+                  </p>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase">
+                    Resident code
+                  </label>
+                  <input
+                    value={residentCode}
+                    onChange={(e) => setResidentCode(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono outline-none"
+                    placeholder="RES-A01"
+                  />
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void legacyResident()}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-border p-2 text-sm hover:bg-muted/50"
+                  >
+                    <User className="h-4 w-4" />
+                    Sign in with code
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isApiMode() && (
+            <p className="text-sm text-muted-foreground mb-4">
+              Set <code className="text-xs">NEXT_PUBLIC_API_URL</code> for API login, or use offline demo from the
+              home page.
+            </p>
+          )}
 
           <p className="mt-8 text-xs text-muted-foreground">
             By continuing you agree to the <a className="hover:underline" href="/terms">Terms</a> and{" "}

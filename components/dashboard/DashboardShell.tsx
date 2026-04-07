@@ -16,6 +16,7 @@ import {
   QrCode,
   Settings,
   Shield,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -38,6 +39,7 @@ type NavItem = {
 const adminNav: NavItem[] = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: Users, label: "Residents", href: "/dashboard/residents" },
+  { icon: UserCheck, label: "KYC queue", href: "/dashboard/kyc" },
   { icon: QrCode, label: "Visitor Access", href: "/dashboard/visitors" },
   { icon: Shield, label: "Security", href: "/dashboard/security" },
   { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
