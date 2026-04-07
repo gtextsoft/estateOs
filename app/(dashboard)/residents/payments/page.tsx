@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { CURRENT_RESIDENT_ID, pushResidentNotification } from "@/components/resident/store";
+import { getCurrentResidentId, pushResidentNotification } from "@/components/resident/store";
 import { loadPayments, savePayments, type PaymentRecord, type PaymentStatus } from "@/components/dashboard/paymentsStore";
-import { loadResidents } from "@/components/dashboard/residentsStore";
+import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import { createPaymentRequestApi, fetchMyPayments, fetchMyProfile } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function paymentBadgeVariant(s: PaymentStatus) {
   if (s === "Paid") return "active";
@@ -25,12 +27,28 @@ export default function ResidentPaymentsPage() {
   const [createType, setCreateType] = useState("Service Charge");
   const [createAmount, setCreateAmount] = useState("");
   const [createNotes, setCreateNotes] = useState("");
+  const [resident, setResident] = useState<ResidentRecord | null>(null);
 
   useEffect(() => {
-    const sync = () => setPayments(loadPayments().filter((p) => p.residentId === CURRENT_RESIDENT_ID));
-    sync();
+    const sync = async () => {
+      if (isApiMode()) {
+        try {
+          const [p, prof] = await Promise.all([fetchMyPayments(), fetchMyProfile()]);
+          setPayments(p);
+          setResident(prof);
+        } catch {
+          setPayments([]);
+          setResident(null);
+        }
+        return;
+      }
+      setPayments(loadPayments().filter((p) => p.residentId === getCurrentResidentId()));
+      setResident(loadResidents().find((r) => r.id === getCurrentResidentId()) ?? null);
+    };
+    void sync();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_payments_v1") sync();
+      if (isApiMode()) return;
+      if (e.key === "estateos_payments_v1") void sync();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -50,14 +68,31 @@ export default function ResidentPaymentsPage() {
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [payments, query]);
 
-  const resident = useMemo(
-    () => loadResidents().find((r) => r.id === CURRENT_RESIDENT_ID) ?? null,
-    [],
-  );
-
   const createPaymentRequest = () => {
     if (!resident) return;
     if (!createType.trim() || !createAmount.trim()) return;
+
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const nextPayment = await createPaymentRequestApi({
+            type: createType.trim(),
+            amount: createAmount.trim(),
+            notes: createNotes.trim() || undefined,
+          });
+          setPayments((prev) => [nextPayment, ...prev]);
+          setCreateOpen(false);
+          setSelected(nextPayment);
+          setCreateAmount("");
+          setCreateNotes("");
+          setCreateType("Service Charge");
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+
     const nowTs = Date.now();
     const dateLabel = new Date(nowTs).toLocaleDateString(undefined, {
       month: "short",

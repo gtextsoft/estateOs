@@ -2,7 +2,11 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Shield, User, Users } from "lucide-react";
+
+import { loginRequest } from "@/lib/estate-api";
+import { isApiMode, setSession } from "@/lib/session";
 
 const roles = [
   {
@@ -27,6 +31,33 @@ const roles = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const [residentCode, setResidentCode] = useState(
+    () => process.env.NEXT_PUBLIC_DEMO_RESIDENT_CODE || "RES-A01",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const go = async (r: (typeof roles)[number]["key"]) => {
+    setError(null);
+    setLoading(true);
+    try {
+      if (isApiMode()) {
+        const res = await loginRequest({
+          role: r,
+          ...(r === "resident" ? { residentCode: residentCode.trim() } : {}),
+        });
+        setSession({ token: res.token, userId: res.userId, role: res.role });
+      }
+      document.cookie = `estateos_role=${r}; path=/; max-age=${60 * 60 * 24 * 30}`;
+      if (r === "resident") router.push("/residents");
+      else if (r === "guard") router.push("/security");
+      else router.push("/dashboard");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-dvh bg-background flex overflow-hidden">
@@ -72,18 +103,42 @@ export default function LoginPage() {
             This controls your dashboard experience. You can change it later.
           </p>
 
+          {isApiMode() && (
+            <div className="mb-6 rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Backend API
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Connected to <span className="font-mono text-foreground">{process.env.NEXT_PUBLIC_API_URL}</span>.
+                Residents must enter the estate-issued resident code (seed example: RES-A01).
+              </p>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3">
+                Resident code
+              </label>
+              <input
+                value={residentCode}
+                onChange={(e) => setResidentCode(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder="RES-A01"
+                autoComplete="off"
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-3">
             {roles.map((r) => (
               <button
                 key={r.key}
                 type="button"
-                className="w-full text-left bg-background rounded-xl border border-border p-4 shadow-soft hover:shadow-card transition-shadow"
-                onClick={() => {
-                  document.cookie = `estateos_role=${r.key}; path=/; max-age=${60 * 60 * 24 * 30}`;
-                  if (r.key === "resident") router.push("/residents");
-                  else if (r.key === "guard") router.push("/security");
-                  else router.push("/dashboard");
-                }}
+                disabled={loading}
+                className="w-full text-left bg-background rounded-xl border border-border p-4 shadow-soft hover:shadow-card transition-shadow disabled:opacity-60"
+                onClick={() => void go(r.key)}
               >
                 <div className="flex items-start gap-3">
                   <div className="h-11 w-11 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -111,4 +166,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

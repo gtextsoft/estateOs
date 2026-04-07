@@ -10,6 +10,13 @@ import { ResidentPassesTable } from "@/components/dashboard/ResidentPassesTable"
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
 import type { GuestPass, PassType } from "@/components/resident/types";
 import { loadPasses, savePasses } from "@/components/resident/store";
+import {
+  createAdminGuestPass,
+  fetchAdminGuestPassesAll,
+  fetchAdminResidents,
+  fetchExpectedGuestPasses,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function nextPassId(existing: GuestPass[]) {
   const nums = existing
@@ -23,6 +30,7 @@ export default function VisitorsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [residents, setResidents] = useState<ResidentRecord[]>([]);
   const [passes, setPasses] = useState<GuestPass[]>([]);
+  const [passesTableKey, setPassesTableKey] = useState(0);
 
   const [hostResidentId, setHostResidentId] = useState<string>("");
   const [guestName, setGuestName] = useState("");
@@ -31,17 +39,58 @@ export default function VisitorsPage() {
   const [timeStart, setTimeStart] = useState("09:00");
   const [timeEnd, setTimeEnd] = useState("17:00");
   const [error, setError] = useState<string | null>(null);
+  const [expectedDate, setExpectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expectedPasses, setExpectedPasses] = useState<
+    (GuestPass & { residentName?: string; residentUnit?: string })[]
+  >([]);
 
   useEffect(() => {
-    setResidents(loadResidents());
-    setPasses(loadPasses());
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [r, p] = await Promise.all([fetchAdminResidents(), fetchAdminGuestPassesAll()]);
+          setResidents(r);
+          setPasses(p);
+        } catch {
+          setResidents([]);
+          setPasses([]);
+        }
+        return;
+      }
+      setResidents(loadResidents());
+      setPasses(loadPasses());
+    };
+    void load();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_residents_v1") setResidents(loadResidents());
       if (e.key === "estateos_resident_passes_v1") setPasses(loadPasses());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    if (!isApiMode()) {
+      const d = expectedDate;
+      setExpectedPasses(
+        passes.filter(
+          (p) =>
+            p.status === "active" &&
+            (p.passType === "permanent" || (p.date && p.date === d)),
+        ),
+      );
+      return;
+    }
+    void (async () => {
+      try {
+        const list = await fetchExpectedGuestPasses(expectedDate);
+        setExpectedPasses(list);
+      } catch {
+        setExpectedPasses([]);
+      }
+    })();
+  }, [isApiMode, expectedDate, passes]);
 
   const activeResidents = useMemo(
     () => residents.filter((r) => r.status === "Active"),
@@ -69,6 +118,31 @@ export default function VisitorsPage() {
       return;
     }
     setError(null);
+
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const newPass = await createAdminGuestPass(host.id, {
+            guestName: name,
+            passType: guestType,
+            date: validDate,
+            timeStart: guestType === "service" ? timeStart : undefined,
+            timeEnd: guestType === "service" ? timeEnd : undefined,
+          });
+          setPasses((prev) => [newPass, ...prev]);
+          setPassesTableKey((k) => k + 1);
+        } catch {
+          setError("Could not create pass. Try again.");
+        }
+      })();
+      setGuestName("");
+      setGuestType("single");
+      setValidDate(new Date().toISOString().slice(0, 10));
+      setTimeStart("09:00");
+      setTimeEnd("17:00");
+      setCreateOpen(false);
+      return;
+    }
 
     const id = nextPassId(passes);
     const dateLabel = new Date(validDate).toLocaleDateString(undefined, {
@@ -143,7 +217,58 @@ export default function VisitorsPage() {
         ))}
       </div>
 
-      <ResidentPassesTable />
+      <div className="bg-card rounded-xl border border-border shadow-soft p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-foreground">Expected visitors</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Active passes valid for the selected date (includes permanent passes).
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Date
+            </label>
+            <Input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">Guest</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+                <th className="px-3 py-2 font-medium">Host</th>
+                <th className="px-3 py-2 font-medium">Code</th>
+              </tr>
+            </thead>
+            <tbody>
+              {expectedPasses.map((p) => {
+                const host = p.residentName
+                  ? `${p.residentName}${p.residentUnit ? ` · ${p.residentUnit}` : ""}`
+                  : residents.find((r) => r.id === p.residentId)?.name ?? "—";
+                return (
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-3 py-2 text-foreground">{p.guestName}</td>
+                    <td className="px-3 py-2 capitalize text-muted-foreground">{p.passType}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{host}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{p.code}</td>
+                  </tr>
+                );
+              })}
+              {expectedPasses.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                    No expected visitors for this date.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <ResidentPassesTable key={passesTableKey} />
 
       <Modal isOpen={createOpen} onClose={() => setCreateOpen(false)} title="Create guest pass (admin)">
         <div className="space-y-6">

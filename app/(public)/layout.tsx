@@ -6,7 +6,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh bg-[hsla(var(--background)/1)]">
       <Navbar />
-      <main className="pt-16">{children}</main>
+      <main className="pt-20">{children}</main>
       <Footer />
     </div>
   );

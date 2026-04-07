@@ -6,7 +6,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
-import { loadGates, loadSecurityEvents, processSecurityScan, saveGatePreset, type SecurityEventRecord, type SecurityGate, type SecurityGateId } from "@/components/dashboard/securityStore";
+import {
+  loadGates,
+  loadSecurityEvents,
+  processSecurityScan,
+  saveGatePreset,
+  saveSecurityEvents,
+  type SecurityEventRecord,
+  type SecurityGate,
+  type SecurityGateId,
+} from "@/components/dashboard/securityStore";
+import {
+  fetchSecurityEvents,
+  fetchSecurityGates,
+  securityManualDenialRequest,
+  securityScanRequest,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function fmt(ts: number) {
   return new Date(ts).toLocaleString();
@@ -44,12 +60,31 @@ export default function SecurityScannerPage() {
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [manualReason, setManualReason] = useState("");
+  const [manualCode, setManualCode] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
 
   const refresh = () => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const [gs, evs] = await Promise.all([fetchSecurityGates(), fetchSecurityEvents({ limit: 200 })]);
+          setGates(gs.length ? gs : loadGates());
+          const list = gs.length ? gs : loadGates();
+          if (!list.some((g) => g.id === gateId)) setGateId((list[0]?.id as SecurityGateId) ?? "north");
+          setEvents(evs);
+        } catch {
+          const gs = loadGates();
+          setGates(gs);
+          setEvents(loadSecurityEvents());
+        }
+      })();
+      return;
+    }
     const gs = loadGates();
     setGates(gs);
     if (!gs.some((g) => g.id === gateId)) setGateId(gs[0]?.id ?? "north");
@@ -62,6 +97,7 @@ export default function SecurityScannerPage() {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_security_events_v1" || e.key === "estateos_security_gates_v1") refresh();
     };
     window.addEventListener("storage", onStorage);
@@ -133,6 +169,24 @@ export default function SecurityScannerPage() {
               const raw = found.find((x) => x.rawValue)?.rawValue ?? "";
               const code = extractCode(raw);
               if (code) {
+                if (isApiMode()) {
+                  void (async () => {
+                    try {
+                      const result = await securityScanRequest({
+                        rawQrPayload: code,
+                        gateId,
+                        action: "auto",
+                      });
+                      setLastScan(result);
+                      setScanCode(code);
+                      refresh();
+                      setCameraOpen(false);
+                    } catch {
+                      /* ignore */
+                    }
+                  })();
+                  return;
+                }
                 const result = processSecurityScan({ subjectCode: code, gateId, action: "auto" });
                 setLastScan(result);
                 setScanCode(code);
@@ -171,9 +225,66 @@ export default function SecurityScannerPage() {
 
   const submit = (action: "auto" | "entry" | "exit") => {
     if (!scanCode.trim()) return;
-    const result = processSecurityScan({ subjectCode: scanCode.trim(), gateId, action });
+    const raw = scanCode.trim();
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const result = await securityScanRequest({ rawQrPayload: raw, gateId, action });
+          setLastScan(result);
+          setScanCode("");
+          refresh();
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+    const result = processSecurityScan({ subjectCode: raw, gateId, action });
     setLastScan(result);
     setScanCode("");
+    refresh();
+  };
+
+  const submitManualDenial = () => {
+    const reason = manualReason.trim();
+    if (!reason) return;
+    if (isApiMode()) {
+      setManualBusy(true);
+      void (async () => {
+        try {
+          const result = await securityManualDenialRequest({
+            gateId,
+            reason,
+            subjectCode: manualCode.trim() || undefined,
+          });
+          setLastScan(result);
+          setManualReason("");
+          setManualCode("");
+          refresh();
+        } catch {
+          /* ignore */
+        } finally {
+          setManualBusy(false);
+        }
+      })();
+      return;
+    }
+    const ev: SecurityEventRecord = {
+      id: `manual_${Date.now()}`,
+      type: "access_denied",
+      gateId,
+      gateName: gates.find((g) => g.id === gateId)?.name ?? gateId,
+      time: Date.now(),
+      subjectType: "unknown",
+      subjectCode: manualCode.trim() || "MANUAL",
+      action: "entry",
+      message: `Manual denial: ${reason}`,
+    };
+    setLastScan({ ok: false, event: ev });
+    const list = loadSecurityEvents();
+    saveSecurityEvents([ev, ...list].slice(0, 500));
+    setManualReason("");
+    setManualCode("");
     refresh();
   };
 
@@ -207,6 +318,35 @@ export default function SecurityScannerPage() {
             {lastScan.event.message}
           </div>
         )}
+      </div>
+
+      <div className="bg-card rounded-xl border border-border shadow-soft p-5 space-y-4">
+        <h3 className="font-display text-lg font-semibold text-foreground">Manual denial</h3>
+        <p className="text-sm text-muted-foreground">
+          Log a walk-in denial or override without scanning a QR (reason is recorded on the security event log).
+        </p>
+        <Input
+          value={manualCode}
+          onChange={(e) => setManualCode(e.target.value)}
+          placeholder="Subject code (optional)"
+          className="font-mono text-sm"
+        />
+        <textarea
+          value={manualReason}
+          onChange={(e) => setManualReason(e.target.value)}
+          placeholder="Reason for denial"
+          rows={3}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+          disabled={manualBusy || !manualReason.trim()}
+          onClick={() => submitManualDenial()}
+        >
+          {manualBusy ? "Logging…" : "Log manual denial"}
+        </Button>
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-soft p-5">

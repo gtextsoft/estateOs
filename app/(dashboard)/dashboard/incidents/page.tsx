@@ -11,11 +11,20 @@ import {
   type IncidentRecord,
   type IncidentStatus,
   type IncidentSeverity,
+  type IncidentTypeCategory,
 } from "@/components/dashboard/incidentsStore";
 import { Pagination } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
 import { pushResidentNotification } from "@/components/resident/store";
+import {
+  createAdminIncident,
+  fetchAdminIncidentDetail,
+  fetchAdminIncidents,
+  fetchAdminResidents,
+  patchAdminIncident,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
@@ -32,6 +41,8 @@ export default function IncidentsPage() {
   const [createStatus, setCreateStatus] = useState<IncidentStatus>("Open");
   const [createResidentId, setCreateResidentId] = useState<string>("");
   const [createDescription, setCreateDescription] = useState("");
+  const [createIncidentType, setCreateIncidentType] = useState<IncidentTypeCategory>("other");
+  const [createAttachments, setCreateAttachments] = useState("");
   const [createNotifyResident, setCreateNotifyResident] = useState(true);
 
   const [draftStatus, setDraftStatus] = useState<IncidentStatus>("Open");
@@ -39,9 +50,24 @@ export default function IncidentsPage() {
   const [notifyResident, setNotifyResident] = useState(false);
 
   useEffect(() => {
-    setIncidents(loadIncidents());
-    setResidents(loadResidents());
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [inc, res] = await Promise.all([fetchAdminIncidents(), fetchAdminResidents()]);
+          setIncidents(inc);
+          setResidents(res);
+        } catch {
+          setIncidents([]);
+          setResidents([]);
+        }
+        return;
+      }
+      setIncidents(loadIncidents());
+      setResidents(loadResidents());
+    };
+    void load();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_incidents_v1") setIncidents(loadIncidents());
       if (e.key === "estateos_residents_v1") setResidents(loadResidents());
     };
@@ -97,6 +123,8 @@ export default function IncidentsPage() {
             setCreateStatus("Open");
             setCreateResidentId("");
             setCreateDescription("");
+            setCreateIncidentType("other");
+            setCreateAttachments("");
             setCreateNotifyResident(true);
           }}
         >
@@ -221,7 +249,28 @@ export default function IncidentsPage() {
                   <p className="text-xs text-muted-foreground">Reporter</p>
                   <p className="font-medium text-foreground">{selected.reporter}</p>
                 </div>
+                {selected.incidentType && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Type</p>
+                    <p className="font-medium text-foreground capitalize">{selected.incidentType.replace(/_/g, " ")}</p>
+                  </div>
+                )}
               </div>
+
+              {selected.attachments && selected.attachments.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs text-muted-foreground mb-2">Attachments</p>
+                  <ul className="space-y-1">
+                    {selected.attachments.map((u) => (
+                      <li key={u}>
+                        <a href={u} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline break-all">
+                          {u}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {selected.description && (
                 <div className="mt-4">
@@ -300,6 +349,27 @@ export default function IncidentsPage() {
                   type="button"
                   className="bg-gradient-gold shadow-gold hover:opacity-90"
                   onClick={() => {
+                    if (!selected) return;
+
+                    if (isApiMode()) {
+                      void (async () => {
+                        try {
+                          const msg =
+                            draftUpdate.trim() ||
+                            `Status updated to ${draftStatus} for: ${selected.title}`;
+                          await patchAdminIncident(selected.id, { status: draftStatus, message: msg });
+                          const detail = await fetchAdminIncidentDetail(selected.id);
+                          const merged = { ...detail.incident, updates: detail.updates };
+                          setIncidents((prev) => prev.map((i) => (i.id === selected.id ? merged : i)));
+                          setSelected(merged);
+                          setDraftUpdate("");
+                        } catch {
+                          /* ignore */
+                        }
+                      })();
+                      return;
+                    }
+
                     const updateMessage =
                       draftUpdate.trim() ||
                       `Status updated to ${draftStatus} for: ${selected.title}`;
@@ -441,6 +511,32 @@ export default function IncidentsPage() {
 
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Incident type
+            </label>
+            <Select
+              value={createIncidentType}
+              onChange={(e) => setCreateIncidentType(e.target.value as IncidentTypeCategory)}
+            >
+              {(
+                [
+                  "theft",
+                  "dispute",
+                  "breach",
+                  "noise",
+                  "property_damage",
+                  "medical",
+                  "other",
+                ] as IncidentTypeCategory[]
+              ).map((t) => (
+                <option key={t} value={t}>
+                  {t.replace(/_/g, " ")}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Description
             </label>
             <textarea
@@ -448,6 +544,17 @@ export default function IncidentsPage() {
               onChange={(e) => setCreateDescription(e.target.value)}
               placeholder="Add incident details for investigation..."
               className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Attachment URLs (optional, comma-separated)
+            </label>
+            <Input
+              value={createAttachments}
+              onChange={(e) => setCreateAttachments(e.target.value)}
+              placeholder="https://…"
             />
           </div>
 
@@ -482,20 +589,68 @@ export default function IncidentsPage() {
                 const title = createTitle.trim();
                 if (title.length < 3) return;
 
+                if (isApiMode()) {
+                  setCreating(true);
+                  void (async () => {
+                    try {
+                      const parseUrls = (s: string) =>
+                        s
+                          .split(/[,\n]/)
+                          .map((x) => x.trim())
+                          .filter(Boolean);
+                      const created = await createAdminIncident({
+                        title,
+                        reporter: createReporter.trim() || "Admin",
+                        severity: createSeverity,
+                        status: createStatus,
+                        description: createDescription.trim() || undefined,
+                        residentId: createResidentId || undefined,
+                        incidentType: createIncidentType,
+                        attachments: parseUrls(createAttachments),
+                      });
+                      const detail = await fetchAdminIncidentDetail(created.id);
+                      const merged = { ...detail.incident, updates: detail.updates };
+                      setIncidents((prev) => [merged, ...prev.filter((i) => i.id !== merged.id)]);
+                      setSelected(merged);
+                      setCreateOpen(false);
+                      if (createNotifyResident && createResidentId) {
+                        pushResidentNotification({
+                          residentId: createResidentId,
+                          type: "notice",
+                          message: `Incident reported: ${title}\nStatus: ${createStatus}`,
+                          meta: { incidentId: merged.id, incidentStatus: createStatus },
+                        });
+                      }
+                    } catch {
+                      /* ignore */
+                    } finally {
+                      setCreating(false);
+                    }
+                  })();
+                  return;
+                }
+
                 setCreating(true);
                 try {
                   const id = `inc_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`;
                   const nowTs = Date.now();
+                  const parseUrls = (s: string) =>
+                    s
+                      .split(/[,\n]/)
+                      .map((x) => x.trim())
+                      .filter(Boolean);
                   const next: IncidentRecord = {
                     id,
                     residentId: createResidentId || undefined,
                     title,
                     reporter: createReporter.trim() || "Admin",
+                    incidentType: createIncidentType,
                     severity: createSeverity,
                     status: createStatus,
                     timeLabel: "Just now",
                     createdAt: nowTs,
                     description: createDescription.trim() || undefined,
+                    attachments: parseUrls(createAttachments),
                     updates: createNotifyResident && createResidentId ? [
                       {
                         id: `up_${nowTs}`,

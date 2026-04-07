@@ -18,7 +18,7 @@ export function HeroSection() {
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-            Seamless visitor access, real-time security monitoring, and intelligent estate operations — all in one elegant platform.
+            Seamless visitor access, real-time security monitoring, and intelligent estate operations all in one elegant platform.
           </p>
 
           <div className="flex flex-wrap gap-4">

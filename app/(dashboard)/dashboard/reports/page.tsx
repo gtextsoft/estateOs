@@ -24,6 +24,14 @@ import type { GuestPass } from "@/components/resident/types";
 import { loadPayments, type PaymentRecord } from "@/components/dashboard/paymentsStore";
 import { loadIncidents, type IncidentRecord } from "@/components/dashboard/incidentsStore";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import {
+  fetchAdminGuestPassesAll,
+  fetchAdminIncidents,
+  fetchAdminPayments,
+  fetchAdminResidents,
+  fetchSecurityEvents,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 const GOLD = "#C9A84C";
 const EMERALD = "#2ECC71";
@@ -83,6 +91,31 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const refresh = () => {
+      if (isApiMode()) {
+        void (async () => {
+          try {
+            const [ev, gp, pay, inc, res] = await Promise.all([
+              fetchSecurityEvents({ limit: 500 }),
+              fetchAdminGuestPassesAll(),
+              fetchAdminPayments(),
+              fetchAdminIncidents(),
+              fetchAdminResidents(),
+            ]);
+            setSecurityEvents(ev);
+            setPasses(gp);
+            setPayments(pay);
+            setIncidents(inc);
+            setResidents(res);
+          } catch {
+            setSecurityEvents([]);
+            setPasses([]);
+            setPayments([]);
+            setIncidents([]);
+            setResidents([]);
+          }
+        })();
+        return;
+      }
       setSecurityEvents(loadSecurityEvents());
       setPasses(loadPasses());
       setPayments(loadPayments());
@@ -93,6 +126,7 @@ export default function ReportsPage() {
     refresh();
 
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (!e.key) return;
       if (
         e.key === "estateos_security_events_v1" ||

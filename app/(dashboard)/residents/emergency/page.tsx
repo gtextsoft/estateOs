@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle, PhoneCall, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CURRENT_RESIDENT_ID, pushResidentNotification } from "@/components/resident/store";
+import { getCurrentResidentId, pushResidentNotification } from "@/components/resident/store";
 import { loadResidents } from "@/components/dashboard/residentsStore";
 import { alertsForResident, pushEmergencyAlert, type EmergencyAlert } from "@/components/dashboard/emergencyStore";
+import { createEmergencyRequest, fetchSecurityEmergencyAlerts } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 import { useEffect } from "react";
 import { Modal } from "@/components/ui/modal";
 
@@ -18,10 +20,23 @@ export default function ResidentEmergencyPage() {
   const [selectedAlert, setSelectedAlert] = useState<EmergencyAlert | null>(null);
 
   useEffect(() => {
-    const sync = () => setMyAlerts(alertsForResident(CURRENT_RESIDENT_ID));
-    sync();
+    const sync = async () => {
+      if (isApiMode()) {
+        try {
+          const all = await fetchSecurityEmergencyAlerts();
+          const rid = getCurrentResidentId();
+          setMyAlerts(all.filter((a) => a.residentId === rid).sort((a, b) => b.createdAt - a.createdAt));
+        } catch {
+          setMyAlerts([]);
+        }
+        return;
+      }
+      setMyAlerts(alertsForResident(getCurrentResidentId()));
+    };
+    void sync();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_emergency_alerts_v1") sync();
+      if (isApiMode()) return;
+      if (e.key === "estateos_emergency_alerts_v1") void sync();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -29,9 +44,26 @@ export default function ResidentEmergencyPage() {
 
   const sendEmergency = (fallback = "Panic button activated by resident.") => {
     const resident =
-      loadResidents().find((r) => r.id === CURRENT_RESIDENT_ID) ?? null;
-    if (!resident) return;
+      loadResidents().find((r) => r.id === getCurrentResidentId()) ?? null;
     const detail = message.trim() || fallback;
+
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          await createEmergencyRequest(detail);
+          const all = await fetchSecurityEmergencyAlerts();
+          const rid = getCurrentResidentId();
+          setMyAlerts(all.filter((a) => a.residentId === rid).sort((a, b) => b.createdAt - a.createdAt));
+          setPanicSent(true);
+          setTimeout(() => setPanicSent(false), 2500);
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+
+    if (!resident) return;
     pushEmergencyAlert({
       residentId: resident.id,
       residentName: resident.name,
@@ -43,7 +75,7 @@ export default function ResidentEmergencyPage() {
       type: "emergency",
       message: `Emergency alert sent from Unit ${resident.unit}.`,
     });
-    setMyAlerts(alertsForResident(CURRENT_RESIDENT_ID));
+    setMyAlerts(alertsForResident(getCurrentResidentId()));
     setPanicSent(true);
     setTimeout(() => setPanicSent(false), 2500);
   };

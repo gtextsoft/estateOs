@@ -2,12 +2,15 @@
 
 import type { GuestPass, PassStatus, PassType, ResidentNotification } from "./types";
 import { loadResidents } from "@/components/dashboard/residentsStore";
+import { getCurrentResidentId, LOCAL_DEMO_RESIDENT_ID } from "@/lib/session";
 
 const PASSES_KEY = "estateos_resident_passes_v1";
 const NOTIFS_KEY = "estateos_resident_notifications_v1";
 
-// Current demo resident (Adaeze Okafor · Unit A-01)
-export const CURRENT_RESIDENT_ID = "res_adaeze_okafor";
+/** @deprecated Prefer getCurrentResidentId() — value is only accurate in local-only mode. */
+export const CURRENT_RESIDENT_ID = LOCAL_DEMO_RESIDENT_ID;
+
+export { getCurrentResidentId };
 
 export function passTypeLabel(t: PassType) {
   if (t === "single") return "Single Entry";
@@ -33,7 +36,7 @@ export function seedPasses(): GuestPass[] {
 
   // Use multiple residents so Host column is populated
   const residentIds = loadResidents().map((r) => r.id);
-  const pickResident = (idx: number) => residentIds[idx % residentIds.length] || CURRENT_RESIDENT_ID;
+  const pickResident = (idx: number) => residentIds[idx % residentIds.length] || getCurrentResidentId();
 
   const base: Array<Omit<GuestPass, "code">> = [
     {
@@ -157,7 +160,7 @@ export function seedNotifications(): ResidentNotification[] {
   return [
     {
       id: "N-001",
-      residentId: CURRENT_RESIDENT_ID,
+      residentId: LOCAL_DEMO_RESIDENT_ID,
       message: "Your guest Kelechi Nwosu has arrived at Main Gate",
       timeLabel: "9 mins ago",
       type: "arrival",
@@ -165,7 +168,7 @@ export function seedNotifications(): ResidentNotification[] {
     },
     {
       id: "N-002",
-      residentId: CURRENT_RESIDENT_ID,
+      residentId: LOCAL_DEMO_RESIDENT_ID,
       message: "MainFix Plumber has been verified and granted entry",
       timeLabel: "1 hr ago",
       type: "service",
@@ -173,7 +176,7 @@ export function seedNotifications(): ResidentNotification[] {
     },
     {
       id: "N-003",
-      residentId: CURRENT_RESIDENT_ID,
+      residentId: LOCAL_DEMO_RESIDENT_ID,
       message: "Service charge of ₦15,000 due on March 31",
       timeLabel: "2 hrs ago",
       type: "payment",
@@ -181,7 +184,7 @@ export function seedNotifications(): ResidentNotification[] {
     },
     {
       id: "N-004",
-      residentId: CURRENT_RESIDENT_ID,
+      residentId: LOCAL_DEMO_RESIDENT_ID,
       message: "Estate general meeting scheduled for March 25",
       timeLabel: "1 day ago",
       type: "notice",
@@ -204,10 +207,10 @@ export function loadPasses(): GuestPass[] {
     const residentIds = new Set(loadResidents().map((r) => r.id));
     // migrate older stored passes that didn't include residentId + ensure host exists
     const migrated = arr.map((p) => {
-      const rid = p.residentId || CURRENT_RESIDENT_ID;
+      const rid = p.residentId || getCurrentResidentId();
       return {
         ...p,
-        residentId: residentIds.has(rid) ? rid : CURRENT_RESIDENT_ID,
+        residentId: residentIds.has(rid) ? rid : getCurrentResidentId(),
         code: (p.code || p.id || "").toString(),
       };
     }) as GuestPass[];
@@ -237,7 +240,7 @@ export function loadNotifications(): ResidentNotification[] {
     // Migration: older notifications didn't include residentId.
     const migrated = parsed.map((n) => ({
       ...n,
-      residentId: (n as any).residentId || CURRENT_RESIDENT_ID,
+      residentId: (n as any).residentId || getCurrentResidentId(),
     }));
     return migrated;
   } catch {

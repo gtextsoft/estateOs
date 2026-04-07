@@ -5,7 +5,7 @@ const steps = [
     icon: UserPlus,
     step: "01",
     title: "Resident Invites Visitor",
-    description: "Create a guest pass — single entry, service window, or permanent access.",
+    description: "Create a guest pass single entry, service window, or permanent access.",
   },
   {
     icon: QrCode,
@@ -37,7 +37,7 @@ export function HowItWorksSection() {
             From Invite to Entry in Seconds
           </h2>
           <p className="text-muted-foreground text-lg">
-            The visitor access flow — the heartbeat of EstateOS.
+            The visitor access flow - the heartbeat of EstateOS.
           </p>
         </div>
 

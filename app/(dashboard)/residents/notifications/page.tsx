@@ -3,19 +3,34 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CURRENT_RESIDENT_ID, loadNotifications, saveNotifications } from "@/components/resident/store";
+import {
+  getCurrentResidentId,
+  loadNotifications,
+  saveNotifications,
+} from "@/components/resident/store";
 import type { ResidentNotification } from "@/components/resident/types";
+import { fetchMyNotifications } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 export default function ResidentNotificationsPage() {
   const [notifications, setNotifications] = useState<ResidentNotification[]>([]);
 
   useEffect(() => {
-    const sync = () => {
-      setNotifications(loadNotifications().filter((n) => n.residentId === CURRENT_RESIDENT_ID));
+    const sync = async () => {
+      if (isApiMode()) {
+        try {
+          setNotifications(await fetchMyNotifications());
+        } catch {
+          setNotifications([]);
+        }
+        return;
+      }
+      setNotifications(loadNotifications().filter((n) => n.residentId === getCurrentResidentId()));
     };
-    sync();
+    void sync();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_resident_notifications_v1") sync();
+      if (isApiMode()) return;
+      if (e.key === "estateos_resident_notifications_v1") void sync();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -24,12 +39,15 @@ export default function ResidentNotificationsPage() {
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const markAllRead = () => {
+    if (isApiMode()) {
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      return;
+    }
+    const rid = getCurrentResidentId();
     const all = loadNotifications();
-    const nextAll = all.map((n) =>
-      n.residentId === CURRENT_RESIDENT_ID ? { ...n, read: true } : n,
-    );
+    const nextAll = all.map((n) => (n.residentId === rid ? { ...n, read: true } : n));
     saveNotifications(nextAll);
-    setNotifications(nextAll.filter((n) => n.residentId === CURRENT_RESIDENT_ID));
+    setNotifications(nextAll.filter((n) => n.residentId === rid));
   };
 
   return (

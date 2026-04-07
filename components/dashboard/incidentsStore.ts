@@ -3,6 +3,15 @@
 export type IncidentSeverity = "Low" | "Medium" | "High";
 export type IncidentStatus = "Open" | "Investigating" | "In Progress" | "Resolved";
 
+export type IncidentTypeCategory =
+  | "theft"
+  | "dispute"
+  | "breach"
+  | "noise"
+  | "property_damage"
+  | "medical"
+  | "other";
+
 export type IncidentUpdate = {
   id: string;
   createdAt: number;
@@ -15,11 +24,13 @@ export type IncidentRecord = {
   residentId?: string;
   title: string;
   reporter: string;
+  incidentType?: IncidentTypeCategory;
   severity: IncidentSeverity;
   status: IncidentStatus;
   timeLabel: string;
   createdAt: number;
   description?: string;
+  attachments?: string[];
   updates?: IncidentUpdate[];
 };
 

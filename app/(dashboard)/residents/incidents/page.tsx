@@ -3,11 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { CURRENT_RESIDENT_ID, pushResidentNotification } from "@/components/resident/store";
-import { loadIncidents, saveIncidents, type IncidentRecord, type IncidentSeverity, type IncidentStatus } from "@/components/dashboard/incidentsStore";
+import { getCurrentResidentId, pushResidentNotification } from "@/components/resident/store";
+import {
+  loadIncidents,
+  saveIncidents,
+  type IncidentRecord,
+  type IncidentSeverity,
+  type IncidentStatus,
+  type IncidentTypeCategory,
+} from "@/components/dashboard/incidentsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { loadResidents } from "@/components/dashboard/residentsStore";
+import { Select } from "@/components/ui/select";
+import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import { createIncidentRequest, fetchMyIncidents, fetchMyProfile } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function incidentSeverityDot(sev: IncidentSeverity) {
   if (sev === "Low") return "bg-emerald-500";
@@ -30,12 +40,30 @@ export default function ResidentIncidentsPage() {
   const [createTitle, setCreateTitle] = useState("");
   const [createSeverity, setCreateSeverity] = useState<IncidentSeverity>("Medium");
   const [createDescription, setCreateDescription] = useState("");
+  const [createIncidentType, setCreateIncidentType] = useState<IncidentTypeCategory>("other");
+  const [createAttachments, setCreateAttachments] = useState("");
+  const [resident, setResident] = useState<ResidentRecord | null>(null);
 
   useEffect(() => {
-    const sync = () => setIncidents(loadIncidents().filter((i) => i.residentId === CURRENT_RESIDENT_ID));
-    sync();
+    const sync = async () => {
+      if (isApiMode()) {
+        try {
+          const [list, prof] = await Promise.all([fetchMyIncidents(), fetchMyProfile()]);
+          setIncidents(list);
+          setResident(prof);
+        } catch {
+          setIncidents([]);
+          setResident(null);
+        }
+        return;
+      }
+      setIncidents(loadIncidents().filter((i) => i.residentId === getCurrentResidentId()));
+      setResident(loadResidents().find((r) => r.id === getCurrentResidentId()) ?? null);
+    };
+    void sync();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_incidents_v1") sync();
+      if (isApiMode()) return;
+      if (e.key === "estateos_incidents_v1") void sync();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -55,25 +83,58 @@ export default function ResidentIncidentsPage() {
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [incidents, query]);
 
-  const resident = useMemo(
-    () => loadResidents().find((r) => r.id === CURRENT_RESIDENT_ID) ?? null,
-    [],
-  );
-
   const createIncident = () => {
     if (!resident) return;
     if (!createTitle.trim()) return;
+
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const parseUrls = (s: string) =>
+            s
+              .split(/[,\n]/)
+              .map((x) => x.trim())
+              .filter(Boolean);
+          const created = await createIncidentRequest({
+            title: createTitle.trim(),
+            severity: createSeverity,
+            description: createDescription.trim() || undefined,
+            incidentType: createIncidentType,
+            attachments: parseUrls(createAttachments),
+          });
+          setIncidents((prev) => [created, ...prev]);
+          setCreateOpen(false);
+          setSelected(created);
+          setCreateTitle("");
+          setCreateDescription("");
+          setCreateIncidentType("other");
+          setCreateAttachments("");
+          setCreateSeverity("Medium");
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+
     const nowTs = Date.now();
+    const parseUrls = (s: string) =>
+      s
+        .split(/[,\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
     const nextIncident: IncidentRecord = {
       id: `inc_res_${nowTs}_${Math.random().toString(16).slice(2, 6)}`,
       residentId: resident.id,
       title: createTitle.trim(),
       reporter: resident.name,
+      incidentType: createIncidentType,
       severity: createSeverity,
       status: "Open",
       timeLabel: "Just now",
       createdAt: nowTs,
       description: createDescription.trim() || undefined,
+      attachments: parseUrls(createAttachments),
       updates: [
         {
           id: `upd_${nowTs}`,
@@ -85,7 +146,7 @@ export default function ResidentIncidentsPage() {
     };
     const next = [nextIncident, ...loadIncidents()];
     saveIncidents(next);
-    setIncidents(next.filter((i) => i.residentId === CURRENT_RESIDENT_ID));
+    setIncidents(next.filter((i) => i.residentId === getCurrentResidentId()));
     pushResidentNotification({
       residentId: resident.id,
       type: "notice",
@@ -96,6 +157,8 @@ export default function ResidentIncidentsPage() {
     setSelected(nextIncident);
     setCreateTitle("");
     setCreateDescription("");
+    setCreateIncidentType("other");
+    setCreateAttachments("");
     setCreateSeverity("Medium");
   };
 
@@ -240,12 +303,42 @@ export default function ResidentIncidentsPage() {
             </div>
           </div>
           <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Type</label>
+            <Select value={createIncidentType} onChange={(e) => setCreateIncidentType(e.target.value as IncidentTypeCategory)}>
+              {(
+                [
+                  "theft",
+                  "dispute",
+                  "breach",
+                  "noise",
+                  "property_damage",
+                  "medical",
+                  "other",
+                ] as IncidentTypeCategory[]
+              ).map((t) => (
+                <option key={t} value={t}>
+                  {t.replace(/_/g, " ")}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</label>
             <textarea
               value={createDescription}
               onChange={(e) => setCreateDescription(e.target.value)}
               placeholder="Provide incident details..."
               className="w-full min-h-[110px] rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Attachment URLs (optional)
+            </label>
+            <Input
+              value={createAttachments}
+              onChange={(e) => setCreateAttachments(e.target.value)}
+              placeholder="https://… , comma-separated"
             />
           </div>
           <div className="flex justify-end gap-2">

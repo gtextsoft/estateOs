@@ -18,6 +18,12 @@ import {
   type ResidentRecord,
 } from "@/components/dashboard/residentsStore";
 import { QrCodeDisplay } from "@/components/ui/QrCodeDisplay";
+import {
+  fetchAdminGuestPassesAll,
+  fetchAdminResidents,
+  patchAdminGuestPass,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function statusPill(status: GuestPass["status"]) {
   switch (status) {
@@ -42,10 +48,26 @@ export function ResidentPassesTable() {
   const [origin, setOrigin] = useState<string>("");
 
   useEffect(() => {
-    setPasses(loadPasses());
-    setResidents(loadResidents());
-    setOrigin(window.location.origin);
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [p, r] = await Promise.all([fetchAdminGuestPassesAll(), fetchAdminResidents()]);
+          setPasses(p);
+          setResidents(r);
+        } catch {
+          setPasses([]);
+          setResidents([]);
+        }
+        setOrigin(window.location.origin);
+        return;
+      }
+      setPasses(loadPasses());
+      setResidents(loadResidents());
+      setOrigin(window.location.origin);
+    };
+    void load();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_resident_passes_v1") setPasses(loadPasses());
       if (e.key === "estateos_residents_v1") setResidents(loadResidents());
     };
@@ -69,6 +91,18 @@ export function ResidentPassesTable() {
   }, [residents]);
 
   const setPassStatus = (id: string, status: GuestPass["status"]) => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          await patchAdminGuestPass(id, status);
+          setPasses((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+          setSelected((cur) => (cur && cur.id === id ? { ...cur, status } : cur));
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
     const next = passes.map((p) => (p.id === id ? { ...p, status } : p));
     setPasses(next);
     savePasses(next);

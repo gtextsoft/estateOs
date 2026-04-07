@@ -4,8 +4,12 @@ export type ResidentStatus = "Active" | "Pending" | "Inactive";
 
 export type ResidentRecord = {
   id: string;
+  /** Estate-issued access code (used at gates / QR). Present when synced from API. */
+  code?: string;
   name: string;
   unit: string;
+  building?: string;
+  block?: string;
   email: string;
   phone?: string;
   status: ResidentStatus;

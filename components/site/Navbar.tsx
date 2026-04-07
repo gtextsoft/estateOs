@@ -10,12 +10,9 @@ export function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
-      <div className="container mx-auto flex items-center justify-between h-16 px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <Image src="/assets/logo.png" alt="EstateOS" width={32} height={32} />
-          <span className="font-display text-xl font-semibold text-foreground">
-            Estate<span className="text-gradient-gold">OS</span>
-          </span>
+      <div className="container mx-auto flex items-center justify-between h-20 px-6">
+        <Link href="/" className="flex items-center">
+          <Image src="/assets/logo.png" alt="EstateOS" width={64} height={64} />
         </Link>
 
         <div className="hidden md:flex items-center gap-8">

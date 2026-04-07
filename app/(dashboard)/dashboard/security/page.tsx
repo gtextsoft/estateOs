@@ -28,6 +28,16 @@ import { loadPasses, passTypeLabel } from "@/components/resident/store";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
 import type { GuestPass } from "@/components/resident/types";
 import { acknowledgeEmergencyAlert, loadEmergencyAlerts, type EmergencyAlert } from "@/components/dashboard/emergencyStore";
+import {
+  ackSecurityEmergencyAlert,
+  fetchAdminResidents,
+  fetchSecurityEmergencyAlerts,
+  fetchSecurityEvents,
+  fetchSecurityGates,
+  fetchSecurityPresenceMap,
+  securityScanRequest,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function timeLabel(ts: number) {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -76,6 +86,33 @@ export default function SecurityPage() {
   const didAutoScanRef = useRef(false);
 
   const refresh = () => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const [g, ev, pr, em, resList] = await Promise.all([
+            fetchSecurityGates(),
+            fetchSecurityEvents({ limit: 500 }),
+            fetchSecurityPresenceMap(),
+            fetchSecurityEmergencyAlerts(),
+            fetchAdminResidents(),
+          ]);
+          setGates(g);
+          setEvents(ev);
+          setPresence(pr);
+          setEmergencyAlerts(em.sort((a, b) => b.createdAt - a.createdAt));
+          setPasses([]);
+          setResidents(resList);
+        } catch {
+          setGates(loadGates());
+          setEvents(loadSecurityEvents());
+          setPresence(loadSecurityPresence());
+          setPasses(loadPasses());
+          setResidents(loadResidents());
+          setEmergencyAlerts(loadEmergencyAlerts().sort((a, b) => b.createdAt - a.createdAt));
+        }
+      })();
+      return;
+    }
     setGates(loadGates());
     const nextEvents = loadSecurityEvents();
     const nextPresenceRaw = loadSecurityPresence();
@@ -84,6 +121,28 @@ export default function SecurityPage() {
     setPasses(loadPasses());
     setResidents(loadResidents());
     setEmergencyAlerts(loadEmergencyAlerts().sort((a, b) => b.createdAt - a.createdAt));
+  };
+
+  const submitScan = (action: "auto" | "entry" | "exit") => {
+    if (!scanCode.trim()) return;
+    const raw = scanCode.trim();
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const result = await securityScanRequest({ rawQrPayload: raw, gateId, action });
+          setLastScan(result);
+          refresh();
+          setScanCode("");
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+    const result = processSecurityScan({ subjectCode: raw, gateId, action });
+    setLastScan(result);
+    refresh();
+    setScanCode("");
   };
 
   useEffect(() => {
@@ -96,6 +155,7 @@ export default function SecurityPage() {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (
         e.key === "estateos_emergency_alerts_v1" ||
         e.key === "estateos_security_events_v1" ||
@@ -117,6 +177,23 @@ export default function SecurityPage() {
     didAutoScanRef.current = true;
 
     const subjectCode = code.toString();
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const result = await securityScanRequest({
+            rawQrPayload: subjectCode,
+            gateId,
+            action: "auto",
+          });
+          setLastScan(result);
+          refresh();
+        } catch {
+          /* ignore */
+        }
+        router.replace("/dashboard/security");
+      })();
+      return;
+    }
     const result = processSecurityScan({ subjectCode, gateId, action: "auto" });
     setLastScan(result);
     refresh();
@@ -488,54 +565,16 @@ export default function SecurityPage() {
             </div>
 
             <div className="grid sm:grid-cols-3 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (!scanCode.trim()) return;
-                  const result = processSecurityScan({
-                    subjectCode: scanCode,
-                    gateId,
-                    action: "auto",
-                  });
-                  setLastScan(result);
-                  refresh();
-                  setScanCode("");
-                }}
-              >
+              <Button type="button" variant="outline" onClick={() => submitScan("auto")}>
                 Auto (Entry/Exit)
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (!scanCode.trim()) return;
-                  const result = processSecurityScan({
-                    subjectCode: scanCode,
-                    gateId,
-                    action: "entry",
-                  });
-                  setLastScan(result);
-                  refresh();
-                  setScanCode("");
-                }}
-              >
+              <Button type="button" variant="outline" onClick={() => submitScan("entry")}>
                 Force Entry
               </Button>
               <Button
                 type="button"
                 className="bg-destructive text-destructive-foreground"
-                onClick={() => {
-                  if (!scanCode.trim()) return;
-                  const result = processSecurityScan({
-                    subjectCode: scanCode,
-                    gateId,
-                    action: "exit",
-                  });
-                  setLastScan(result);
-                  refresh();
-                  setScanCode("");
-                }}
+                onClick={() => submitScan("exit")}
               >
                 Force Exit
               </Button>
@@ -803,6 +842,18 @@ export default function SecurityPage() {
               </Link>
               <Button
                 onClick={() => {
+                  if (isApiMode()) {
+                    void (async () => {
+                      try {
+                        await ackSecurityEmergencyAlert(selectedEmergency.id);
+                        setSelectedEmergency(null);
+                        refresh();
+                      } catch {
+                        /* ignore */
+                      }
+                    })();
+                    return;
+                  }
                   acknowledgeEmergencyAlert(selectedEmergency.id);
                   setSelectedEmergency(null);
                   refresh();

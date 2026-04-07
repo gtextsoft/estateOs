@@ -18,13 +18,11 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  CURRENT_RESIDENT_ID,
-  loadNotifications,
-  saveNotifications,
-} from "@/components/resident/store";
+import { loadNotifications, saveNotifications } from "@/components/resident/store";
 import type { ResidentNotification } from "@/components/resident/types";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import { fetchMyNotifications, fetchMyProfile, logoutRequest } from "@/lib/estate-api";
+import { clearSession, getCurrentResidentId, isApiMode } from "@/lib/session";
 
 type NavItem = {
   icon: React.ElementType;
@@ -72,16 +70,30 @@ export function ResidentShell({
   }, []);
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [prof, notifs] = await Promise.all([fetchMyProfile(), fetchMyNotifications()]);
+          setResident(prof);
+          setNotifications(notifs);
+        } catch {
+          setResident(null);
+          setNotifications([]);
+        }
+        return;
+      }
       const all = loadResidents();
-      setResident(all.find((r) => r.id === CURRENT_RESIDENT_ID) ?? null);
-      setNotifications(
-        loadNotifications().filter((n) => n.residentId === CURRENT_RESIDENT_ID),
-      );
+      setResident(all.find((r) => r.id === getCurrentResidentId()) ?? null);
+      setNotifications(loadNotifications().filter((n) => n.residentId === getCurrentResidentId()));
     };
-    load();
+    void load();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_residents_v1" || e.key === "estateos_resident_notifications_v1") load();
+      if (
+        !isApiMode() &&
+        (e.key === "estateos_residents_v1" || e.key === "estateos_resident_notifications_v1")
+      ) {
+        void load();
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -120,6 +132,7 @@ export function ResidentShell({
     if (n.type === "arrival") return "Visitor arrived";
     if (n.type === "service") return "Guest verified";
     if (n.type === "payment") return "Payment update";
+    if (n.type === "emergency") return "Emergency";
     return "Notice";
   };
 
@@ -207,8 +220,18 @@ export function ResidentShell({
             variant="ghost"
             className="w-full justify-start text-muted-foreground"
             onClick={() => {
-              document.cookie = "estateos_role=; path=/; max-age=0";
-              window.location.href = "/login";
+              void (async () => {
+                document.cookie = "estateos_role=; path=/; max-age=0";
+                if (isApiMode()) {
+                  try {
+                    await logoutRequest();
+                  } catch {
+                    /* ignore */
+                  }
+                  clearSession();
+                }
+                window.location.href = "/login";
+              })();
             }}
           >
             <LogOut className="h-4 w-4 mr-2" />
@@ -260,12 +283,18 @@ export function ResidentShell({
                       href="/residents/notifications"
                       className="text-xs font-medium text-primary hover:underline"
                       onClick={() => {
+                        if (isApiMode()) {
+                          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                          setNotifOpen(false);
+                          return;
+                        }
+                        const rid = getCurrentResidentId();
                         const current = loadNotifications();
                         const next = current.map((n) =>
-                          n.residentId === CURRENT_RESIDENT_ID ? { ...n, read: true } : n,
+                          n.residentId === rid ? { ...n, read: true } : n,
                         );
                         saveNotifications(next);
-                        setNotifications(next.filter((n) => n.residentId === CURRENT_RESIDENT_ID));
+                        setNotifications(next.filter((n) => n.residentId === rid));
                         setNotifOpen(false);
                       }}
                     >
@@ -330,8 +359,18 @@ export function ResidentShell({
                       type="button"
                       className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       onClick={() => {
-                        document.cookie = "estateos_role=; path=/; max-age=0";
-                        window.location.href = "/login";
+                        void (async () => {
+                          document.cookie = "estateos_role=; path=/; max-age=0";
+                          if (isApiMode()) {
+                            try {
+                              await logoutRequest();
+                            } catch {
+                              /* ignore */
+                            }
+                            clearSession();
+                          }
+                          window.location.href = "/login";
+                        })();
                       }}
                     >
                       <LogOut className="h-4 w-4" />

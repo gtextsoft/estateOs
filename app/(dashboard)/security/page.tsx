@@ -5,6 +5,8 @@ import Link from "next/link";
 import { AlertTriangle, QrCode, Siren } from "lucide-react";
 import { loadEmergencyAlerts } from "@/components/dashboard/emergencyStore";
 import { loadSecurityEvents, loadSecurityPresence } from "@/components/dashboard/securityStore";
+import { fetchSecurityEmergencyAlerts, fetchSecurityEvents, fetchSecurityPresenceMap } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 export default function SecurityOverviewPage() {
   const [eventsCount, setEventsCount] = useState(0);
@@ -12,6 +14,25 @@ export default function SecurityOverviewPage() {
   const [activeEmergencies, setActiveEmergencies] = useState(0);
 
   const sync = () => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const [events, presence, alerts] = await Promise.all([
+            fetchSecurityEvents({ limit: 500 }),
+            fetchSecurityPresenceMap(),
+            fetchSecurityEmergencyAlerts(),
+          ]);
+          setEventsCount(events.length);
+          setInsideNow(Object.values(presence).filter((p) => p?.inside).length);
+          setActiveEmergencies(alerts.filter((a) => a.status === "active").length);
+        } catch {
+          setEventsCount(0);
+          setInsideNow(0);
+          setActiveEmergencies(0);
+        }
+      })();
+      return;
+    }
     const events = loadSecurityEvents();
     const presence = loadSecurityPresence();
     const alerts = loadEmergencyAlerts();
@@ -23,6 +44,7 @@ export default function SecurityOverviewPage() {
   useEffect(() => {
     sync();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (
         e.key === "estateos_security_events_v1" ||
         e.key === "estateos_security_presence_v1" ||

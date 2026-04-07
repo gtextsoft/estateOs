@@ -6,6 +6,8 @@ import { Copy, Loader2, MoreHorizontal, Plus, QrCode, Search, UserPlus } from "l
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createResidentId, loadResidents, saveResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import { createAdminResident, fetchAdminResidents } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 import { revokePassesForResident } from "@/components/resident/store";
 import { Modal } from "@/components/ui/modal";
 import { Pagination } from "@/components/ui/pagination";
@@ -30,6 +32,8 @@ export default function ResidentsPage() {
   const [email, setEmail] = useState("");
   const [unit, setUnit] = useState("");
   const [phone, setPhone] = useState("");
+  const [building, setBuilding] = useState("");
+  const [block, setBlock] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewResidentId, setPreviewResidentId] = useState<string>("");
@@ -56,6 +60,29 @@ export default function ResidentsPage() {
     }
     setSaving(true);
     try {
+      if (isApiMode()) {
+        const record = await createAdminResident({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          unit: unit.trim().toUpperCase(),
+          phone: phone.trim() || undefined,
+          building: building.trim() || undefined,
+          block: block.trim() || undefined,
+        });
+        setResidents((prev) => [record, ...prev.filter((r) => r.id !== record.id)]);
+        setPage(1);
+        setSelected(null);
+        setCopiedEmail(false);
+        setCreateOpen(false);
+        setName("");
+        setEmail("");
+        setUnit("");
+        setPhone("");
+        setBuilding("");
+        setBlock("");
+        setPreviewResidentId("");
+        return;
+      }
       await new Promise((r) => setTimeout(r, 650));
       const existing = loadResidents();
       const residentId = previewResidentId || createResidentId(name);
@@ -64,6 +91,8 @@ export default function ResidentsPage() {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         unit: unit.trim().toUpperCase(),
+        building: building.trim() || undefined,
+        block: block.trim() || undefined,
         phone: phone.trim() || undefined,
         status: "Pending",
         since: monthYearLabel(),
@@ -79,6 +108,8 @@ export default function ResidentsPage() {
       setEmail("");
       setUnit("");
       setPhone("");
+      setBuilding("");
+      setBlock("");
       setPreviewResidentId("");
     } catch {
       setError("Could not save. Please try again.");
@@ -88,9 +119,20 @@ export default function ResidentsPage() {
   };
 
   useEffect(() => {
-    setResidents(loadResidents());
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          setResidents(await fetchAdminResidents());
+        } catch {
+          setResidents([]);
+        }
+      })();
+    } else {
+      setResidents(loadResidents());
+    }
     setOrigin(window.location.origin);
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_residents_v1") setResidents(loadResidents());
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -174,6 +216,8 @@ export default function ResidentsPage() {
             setEmail("");
             setUnit("");
             setPhone("");
+            setBuilding("");
+            setBlock("");
           }}
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -349,6 +393,14 @@ export default function ResidentsPage() {
                   <p className="text-xs text-muted-foreground">Unit</p>
                   <p className="font-medium text-foreground">{selected.unit}</p>
                 </div>
+                {(selected.building || selected.block) && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Building / block</p>
+                    <p className="font-medium text-foreground">
+                      {[selected.building, selected.block].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex flex-col gap-2">
@@ -539,6 +591,18 @@ export default function ResidentsPage() {
                 Phone (optional)
               </label>
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +2348012345678" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                Building (optional)
+              </label>
+              <Input value={building} onChange={(e) => setBuilding(e.target.value)} placeholder="e.g. Tower A" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                Block (optional)
+              </label>
+              <Input value={block} onChange={(e) => setBlock(e.target.value)} placeholder="e.g. East" />
             </div>
           </div>
 

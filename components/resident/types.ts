@@ -27,6 +27,6 @@ export type ResidentNotification = {
     // Used to unlock resident actions (e.g., create payment)
     incidentStatus?: string;
   };
-  type: "arrival" | "service" | "payment" | "notice" | "emergency";
+  type: "arrival" | "service" | "payment" | "notice" | "emergency" | "visitor";
 };
 

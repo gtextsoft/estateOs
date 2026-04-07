@@ -17,6 +17,13 @@ import { Select } from "@/components/ui/select";
 import { pushResidentNotification } from "@/components/resident/store";
 import type { ResidentNotification } from "@/components/resident/types";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
+import {
+  createAdminPaymentRequest,
+  fetchAdminPayments,
+  fetchAdminResidents,
+  patchAdminPayment,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -42,9 +49,24 @@ export default function PaymentsPage() {
   const [createNotifyResident, setCreateNotifyResident] = useState(true);
 
   useEffect(() => {
-    setPayments(loadPayments());
-    setResidents(loadResidents());
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [pay, res] = await Promise.all([fetchAdminPayments(), fetchAdminResidents()]);
+          setPayments(pay);
+          setResidents(res);
+        } catch {
+          setPayments([]);
+          setResidents([]);
+        }
+        return;
+      }
+      setPayments(loadPayments());
+      setResidents(loadResidents());
+    };
+    void load();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_payments_v1") setPayments(loadPayments());
     };
     window.addEventListener("storage", onStorage);
@@ -298,8 +320,26 @@ export default function PaymentsPage() {
                   type="button"
                   className="bg-gradient-gold shadow-gold hover:opacity-90"
                   onClick={() => {
+                    if (!selected) return;
                     const defaultMsg = `Payment update: ${selected.residentName} - ${typeDraft} is now ${statusDraft}`;
                     const notes = messageDraft.trim() || undefined;
+
+                    if (isApiMode()) {
+                      void (async () => {
+                        try {
+                          const updated = await patchAdminPayment(selected.id, {
+                            type: typeDraft.trim() || selected.type,
+                            status: statusDraft,
+                            notes,
+                          });
+                          setPayments((prev) => prev.map((p) => (p.id === selected.id ? updated : p)));
+                          setSelected(updated);
+                        } catch {
+                          /* ignore */
+                        }
+                      })();
+                      return;
+                    }
 
                     const nextPayment: PaymentRecord = {
                       ...selected,
@@ -434,11 +474,48 @@ export default function PaymentsPage() {
                 const resident = residents.find((r) => r.id === createResidentId);
                 if (!resident) return;
 
+                const dateObj = createDueDate ? new Date(createDueDate) : new Date();
+                const dateLabel = dateObj.toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                });
+                const reference = createReference.trim() || `INV-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
+
+                if (isApiMode()) {
+                  setCreating(true);
+                  void (async () => {
+                    try {
+                      const nextPayment = await createAdminPaymentRequest({
+                        residentId: resident.id,
+                        amount: createAmount.trim(),
+                        type: createType.trim(),
+                        notes: createNotes.trim() || undefined,
+                        status: createStatus,
+                        dateLabel,
+                        reference,
+                      });
+                      setPayments((prev) => [nextPayment, ...prev]);
+                      setSelected(nextPayment);
+                      setCreateOpen(false);
+                      if (createNotifyResident) {
+                        pushResidentNotification({
+                          residentId: resident.id,
+                          type: "payment",
+                          message: `Payment created: ${nextPayment.type}\nAmount: ${nextPayment.amount}\nDue: ${nextPayment.dateLabel}\nStatus: ${nextPayment.status}`,
+                        });
+                      }
+                    } catch {
+                      /* ignore */
+                    } finally {
+                      setCreating(false);
+                    }
+                  })();
+                  return;
+                }
+
                 const nowTs = Date.now();
                 const id = `pay_${resident.id}_${nowTs}`;
-                const dateObj = createDueDate ? new Date(createDueDate) : new Date();
-                const dateLabel = dateObj.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-                const reference = createReference.trim() || `INV-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
                 const nextPayment: PaymentRecord = {
                   id,
                   residentId: resident.id,

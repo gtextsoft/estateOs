@@ -22,7 +22,7 @@ import { Modal } from "@/components/ui/modal";
 import { QrCodeDisplay } from "@/components/ui/QrCodeDisplay";
 import type { GuestPass, PassType } from "@/components/resident/types";
 import {
-  CURRENT_RESIDENT_ID,
+  getCurrentResidentId,
   loadNotifications,
   loadPasses,
   pushResidentNotification,
@@ -30,6 +30,17 @@ import {
   passTypeLabel,
   savePasses,
 } from "@/components/resident/store";
+import {
+  createGuestPassRequest,
+  createPaymentRequestApi,
+  fetchMyIncidents,
+  fetchMyGuestPasses,
+  fetchMyNotifications,
+  fetchMyPayments,
+  fetchMyProfile,
+  revokeGuestPassRequest,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 import type { ResidentNotification } from "@/components/resident/types";
 import {
   loadResidents,
@@ -119,19 +130,41 @@ export default function ResidentPortalPage() {
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
-    setPasses(loadPasses());
-    setNotifications(
-      loadNotifications().filter((n) => n.residentId === CURRENT_RESIDENT_ID),
-    );
-    const all = loadResidents();
-    setResident(all.find((r) => r.id === CURRENT_RESIDENT_ID) ?? null);
-    setPayments(
-      loadPayments().filter((p) => p.residentId === CURRENT_RESIDENT_ID),
-    );
-    setIncidents(
-      loadIncidents().filter((i) => i.residentId === CURRENT_RESIDENT_ID),
-    );
-    setOrigin(window.location.origin);
+    const rid = getCurrentResidentId();
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          const [prof, notifs, gp, pay, inc] = await Promise.all([
+            fetchMyProfile(),
+            fetchMyNotifications(),
+            fetchMyGuestPasses(),
+            fetchMyPayments(),
+            fetchMyIncidents(),
+          ]);
+          setResident(prof);
+          setNotifications(notifs);
+          setPasses(gp);
+          setPayments(pay);
+          setIncidents(inc);
+        } catch {
+          setResident(null);
+          setNotifications([]);
+          setPasses([]);
+          setPayments([]);
+          setIncidents([]);
+        }
+        setOrigin(window.location.origin);
+        return;
+      }
+      setPasses(loadPasses());
+      setNotifications(loadNotifications().filter((n) => n.residentId === rid));
+      const all = loadResidents();
+      setResident(all.find((r) => r.id === rid) ?? null);
+      setPayments(loadPayments().filter((p) => p.residentId === rid));
+      setIncidents(loadIncidents().filter((i) => i.residentId === rid));
+      setOrigin(window.location.origin);
+    };
+    void load();
   }, []);
 
   const allowedIncidentStatusesForPayment = ["In Progress", "Resolved"];
@@ -146,29 +179,23 @@ export default function ResidentPortalPage() {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
+      const rid = getCurrentResidentId();
       if (e.key === "estateos_residents_v1") {
         const all = loadResidents();
-        setResident(all.find((r) => r.id === CURRENT_RESIDENT_ID) ?? null);
+        setResident(all.find((r) => r.id === rid) ?? null);
       }
       if (e.key === "estateos_resident_passes_v1") {
         setPasses(loadPasses());
       }
       if (e.key === "estateos_resident_notifications_v1") {
-        setNotifications(
-          loadNotifications().filter(
-            (n) => n.residentId === CURRENT_RESIDENT_ID,
-          ),
-        );
+        setNotifications(loadNotifications().filter((n) => n.residentId === rid));
       }
       if (e.key === "estateos_payments_v1") {
-        setPayments(
-          loadPayments().filter((p) => p.residentId === CURRENT_RESIDENT_ID),
-        );
+        setPayments(loadPayments().filter((p) => p.residentId === rid));
       }
       if (e.key === "estateos_incidents_v1") {
-        setIncidents(
-          loadIncidents().filter((i) => i.residentId === CURRENT_RESIDENT_ID),
-        );
+        setIncidents(loadIncidents().filter((i) => i.residentId === rid));
       }
     };
     window.addEventListener("storage", onStorage);
@@ -192,6 +219,7 @@ export default function ResidentPortalPage() {
   }, []);
 
   useEffect(() => {
+    if (isApiMode()) return;
     if (!passes.length) return;
     savePasses(passes);
   }, [passes]);
@@ -256,7 +284,6 @@ export default function ResidentPortalPage() {
     const name = guestName.trim();
     if (!name) return;
 
-    const id = nextPassId(passes);
     const dateLabel = new Date(validDate).toLocaleDateString(undefined, {
       weekday: "short",
       month: "short",
@@ -270,26 +297,49 @@ export default function ResidentPortalPage() {
           ? `${dateLabel} ${timeStart} – ${timeEnd}`
           : `${dateLabel}, 11:59 PM`;
 
-    const newPass: GuestPass = {
-      id,
-      code: id,
-      residentId: CURRENT_RESIDENT_ID,
-      guestName: name,
-      passType: guestType,
-      validUntilLabel,
-      status: "active",
-      createdAt: Date.now(),
-      date: validDate,
-      timeStart: guestType === "service" ? timeStart : undefined,
-      timeEnd: guestType === "service" ? timeEnd : undefined,
+    const finishLocal = () => {
+      const id = nextPassId(passes);
+      const newPass: GuestPass = {
+        id,
+        code: id,
+        residentId: getCurrentResidentId(),
+        guestName: name,
+        passType: guestType,
+        validUntilLabel,
+        status: "active",
+        createdAt: Date.now(),
+        date: validDate,
+        timeStart: guestType === "service" ? timeStart : undefined,
+        timeEnd: guestType === "service" ? timeEnd : undefined,
+      };
+      setPasses((prev) => [newPass, ...prev]);
+      setSelectedPass(newPass);
     };
 
-    setPasses((prev) => [newPass, ...prev]);
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const created = await createGuestPassRequest({
+            guestName: name,
+            passType: guestType,
+            date: validDate,
+            timeStart: guestType === "service" ? timeStart : undefined,
+            timeEnd: guestType === "service" ? timeEnd : undefined,
+          });
+          setPasses((prev) => [created, ...prev]);
+          setSelectedPass(created);
+        } catch {
+          /* keep modal open */
+        }
+      })();
+    } else {
+      finishLocal();
+    }
+
     setGuestName("");
     setGuestType("single");
     setValidDate(new Date().toISOString().slice(0, 10));
     setCreateOpen(false);
-    setSelectedPass(newPass);
   };
 
   const revokeSelected = () => {
@@ -322,6 +372,22 @@ export default function ResidentPortalPage() {
   };
 
   const revokePassById = (id: string) => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          await revokeGuestPassRequest(id);
+          setPasses((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, status: "revoked" as const } : p)),
+          );
+          setSelectedPass((p) =>
+            p && p.id === id ? { ...p, status: "revoked" } : p,
+          );
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
     setPasses((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status: "revoked" } : p)),
     );
@@ -330,7 +396,7 @@ export default function ResidentPortalPage() {
     );
   };
 
-  const residentCode = resident?.id ?? "";
+  const residentCode = resident?.code ?? resident?.id ?? "";
 
   const copyResidentCode = async () => {
     if (!residentCode) return;
@@ -1006,6 +1072,27 @@ export default function ResidentPortalPage() {
                 if (!resident) return;
                 if (paymentAmount.trim().length === 0) return;
                 if (paymentType.trim().length === 0) return;
+
+                if (isApiMode()) {
+                  void (async () => {
+                    try {
+                      const nextPayment = await createPaymentRequestApi({
+                        type: paymentType.trim(),
+                        amount: paymentAmount.trim(),
+                        notes: paymentNotes.trim() || undefined,
+                      });
+                      setPayments((prev) => [nextPayment, ...prev]);
+                      const notifs = await fetchMyNotifications();
+                      setNotifications(notifs);
+                      setCreatePaymentOpen(false);
+                      setPaymentAmount("");
+                      setPaymentNotes("");
+                    } catch {
+                      /* ignore */
+                    }
+                  })();
+                  return;
+                }
 
                 const nowTs = Date.now();
                 const id = `pay_res_${nowTs}_${Math.random().toString(16).slice(2, 6)}`;

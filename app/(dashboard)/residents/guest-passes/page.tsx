@@ -9,12 +9,18 @@ import { Modal } from "@/components/ui/modal";
 import { QrCodeDisplay } from "@/components/ui/QrCodeDisplay";
 import type { GuestPass, PassType } from "@/components/resident/types";
 import {
-  CURRENT_RESIDENT_ID,
+  getCurrentResidentId,
   loadPasses,
   passStatusBadgeVariant,
   passTypeLabel,
   savePasses,
 } from "@/components/resident/store";
+import {
+  createGuestPassRequest,
+  fetchMyGuestPasses,
+  revokeGuestPassRequest,
+} from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function nextPassId(existing: GuestPass[]) {
   const nums = existing
@@ -39,14 +45,27 @@ export default function ResidentGuestPassesPage() {
   const [timeEnd, setTimeEnd] = useState("17:00");
 
   useEffect(() => {
-    setPasses(loadPasses().filter((p) => p.residentId === CURRENT_RESIDENT_ID));
-    setOrigin(window.location.origin);
+    const load = async () => {
+      if (isApiMode()) {
+        try {
+          setPasses(await fetchMyGuestPasses());
+        } catch {
+          setPasses([]);
+        }
+        setOrigin(window.location.origin);
+        return;
+      }
+      setPasses(loadPasses().filter((p) => p.residentId === getCurrentResidentId()));
+      setOrigin(window.location.origin);
+    };
+    void load();
   }, []);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_resident_passes_v1") {
-        setPasses(loadPasses().filter((p) => p.residentId === CURRENT_RESIDENT_ID));
+        setPasses(loadPasses().filter((p) => p.residentId === getCurrentResidentId()));
       }
     };
     const onEscape = (e: KeyboardEvent) => {
@@ -70,7 +89,6 @@ export default function ResidentGuestPassesPage() {
   const createPass = () => {
     const name = guestName.trim();
     if (!name) return;
-    const id = nextPassId(loadPasses());
     const dateLabel = new Date(validDate).toLocaleDateString(undefined, {
       weekday: "short",
       month: "short",
@@ -83,35 +101,68 @@ export default function ResidentGuestPassesPage() {
           ? `${dateLabel} ${timeStart} – ${timeEnd}`
           : `${dateLabel}, 11:59 PM`;
 
-    const newPass: GuestPass = {
-      id,
-      code: id,
-      residentId: CURRENT_RESIDENT_ID,
-      guestName: name,
-      passType: guestType,
-      validUntilLabel,
-      status: "active",
-      createdAt: Date.now(),
-      date: validDate,
-      timeStart: guestType === "service" ? timeStart : undefined,
-      timeEnd: guestType === "service" ? timeEnd : undefined,
-    };
-    const all = loadPasses();
-    const nextAll = [newPass, ...all];
-    savePasses(nextAll);
-    setPasses(nextAll.filter((p) => p.residentId === CURRENT_RESIDENT_ID));
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const created = await createGuestPassRequest({
+            guestName: name,
+            passType: guestType,
+            date: validDate,
+            timeStart: guestType === "service" ? timeStart : undefined,
+            timeEnd: guestType === "service" ? timeEnd : undefined,
+          });
+          setPasses((prev) => [created, ...prev]);
+          setSelectedPass(created);
+        } catch {
+          /* ignore */
+        }
+      })();
+    } else {
+      const id = nextPassId(loadPasses());
+      const newPass: GuestPass = {
+        id,
+        code: id,
+        residentId: getCurrentResidentId(),
+        guestName: name,
+        passType: guestType,
+        validUntilLabel,
+        status: "active",
+        createdAt: Date.now(),
+        date: validDate,
+        timeStart: guestType === "service" ? timeStart : undefined,
+        timeEnd: guestType === "service" ? timeEnd : undefined,
+      };
+      const all = loadPasses();
+      const nextAll = [newPass, ...all];
+      savePasses(nextAll);
+      setPasses(nextAll.filter((p) => p.residentId === getCurrentResidentId()));
+      setSelectedPass(newPass);
+    }
     setCreateOpen(false);
-    setSelectedPass(newPass);
     setGuestName("");
     setGuestType("single");
     setValidDate(new Date().toISOString().slice(0, 10));
   };
 
   const revokeById = (id: string) => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          await revokeGuestPassRequest(id);
+          setPasses((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, status: "revoked" as const } : p)),
+          );
+          setSelectedPass((cur) => (cur && cur.id === id ? { ...cur, status: "revoked" } : cur));
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
     const all = loadPasses();
     const nextAll = all.map((p) => (p.id === id ? { ...p, status: "revoked" as const } : p));
     savePasses(nextAll);
-    setPasses(nextAll.filter((p) => p.residentId === CURRENT_RESIDENT_ID));
+    setPasses(nextAll.filter((p) => p.residentId === getCurrentResidentId()));
     setSelectedPass((cur) => (cur && cur.id === id ? { ...cur, status: "revoked" } : cur));
   };
 

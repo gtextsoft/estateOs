@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { acknowledgeEmergencyAlert, loadEmergencyAlerts, type EmergencyAlert } from "@/components/dashboard/emergencyStore";
+import { ackSecurityEmergencyAlert, fetchSecurityEmergencyAlerts } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 function fmt(ts: number) {
   return new Date(ts).toLocaleString();
@@ -15,11 +17,25 @@ export default function SecurityEmergenciesPage() {
   const [alerts, setAlerts] = useState<EmergencyAlert[]>([]);
   const [selected, setSelected] = useState<EmergencyAlert | null>(null);
 
-  const sync = () => setAlerts(loadEmergencyAlerts().sort((a, b) => b.createdAt - a.createdAt));
+  const sync = () => {
+    if (isApiMode()) {
+      void (async () => {
+        try {
+          const list = await fetchSecurityEmergencyAlerts();
+          setAlerts(list.sort((a, b) => b.createdAt - a.createdAt));
+        } catch {
+          setAlerts([]);
+        }
+      })();
+      return;
+    }
+    setAlerts(loadEmergencyAlerts().sort((a, b) => b.createdAt - a.createdAt));
+  };
 
   useEffect(() => {
     sync();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_emergency_alerts_v1") sync();
     };
     window.addEventListener("storage", onStorage);
@@ -84,6 +100,18 @@ export default function SecurityEmergenciesPage() {
               <Button
                 className="bg-gradient-gold shadow-gold hover:opacity-90"
                 onClick={() => {
+                  if (isApiMode()) {
+                    void (async () => {
+                      try {
+                        await ackSecurityEmergencyAlert(selected.id);
+                        setSelected(null);
+                        sync();
+                      } catch {
+                        /* ignore */
+                      }
+                    })();
+                    return;
+                  }
                   acknowledgeEmergencyAlert(selected.id);
                   setSelected(null);
                   sync();
