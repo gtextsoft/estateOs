@@ -9,6 +9,7 @@ import { LogOut, Menu, X } from "lucide-react";
 import { logoutRequest, meRequest } from "@/lib/estate-api";
 import { clearSession, getStoredToken, isApiMode, setSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
+import { PlatformLandingBackground } from "@/components/ui/background-snippets";
 
 const navItems: { href: string; label: string; exact?: boolean }[] = [
   { href: "/platform", label: "Overview", exact: true },
@@ -86,16 +87,18 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <div className="relative isolate min-h-dvh flex items-center justify-center">
+        <PlatformLandingBackground />
+        <p className="relative z-10 text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-dvh bg-background p-6 md:p-10">
-        <div className="max-w-lg mx-auto space-y-4">
+      <div className="relative isolate min-h-dvh p-6 md:p-10">
+        <PlatformLandingBackground />
+        <div className="relative z-10 max-w-lg mx-auto space-y-4">
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
@@ -114,9 +117,10 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh bg-background flex">
+    <div className="relative isolate min-h-dvh flex">
+      <PlatformLandingBackground />
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 lg:translate-x-0 lg:static ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-card/95 backdrop-blur-sm border-r border-border transform transition-transform duration-200 lg:translate-x-0 lg:static ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -189,8 +193,8 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      <main className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 border-b border-border flex items-center justify-between px-4 md:px-6 shrink-0">
+      <main className="relative z-10 flex-1 min-w-0 flex flex-col bg-transparent">
+        <header className="h-16 border-b border-border/80 bg-background/55 backdrop-blur-md flex items-center justify-between px-4 md:px-6 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -203,7 +207,7 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
             <h1 className="font-display text-lg font-semibold text-foreground truncate">{title}</h1>
           </div>
         </header>
-        <div className="flex-1 p-4 md:p-8 overflow-auto">{children}</div>
+        <div className="flex-1 p-4 md:p-8 overflow-auto relative">{children}</div>
       </main>
     </div>
   );

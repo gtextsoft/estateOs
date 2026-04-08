@@ -53,6 +53,10 @@
   --shadow-card: 0 4px 30px -8px hsl(220 20% 14% / 0.08);
   --shadow-elevated: 0 12px 40px -12px hsl(220 20% 14% / 0.12);
   --shadow-gold: 0 4px 20px -4px hsl(38 65% 50% / 0.25);
+
+  /* Glow / marketing hero — aligned with existing gold palette */
+  --brand: var(--gold);
+  --brand-foreground: var(--gold-light);
 }
 
 @theme inline {
@@ -83,6 +87,12 @@
 
   --font-display: var(--font-display);
   --font-body: var(--font-body);
+
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
+
+  --animate-appear: appear 0.5s ease-out forwards;
+  --animate-appear-zoom: appear-zoom 0.5s ease-out forwards;
 }
 
 @layer base {
@@ -114,6 +124,9 @@
     --sidebar-accent-foreground: 40 18% 94%;
     --sidebar-border: 220 14% 20%;
     --sidebar-ring: 38 65% 55%;
+
+    --brand: 38 65% 55%;
+    --brand-foreground: 40 60% 70%;
   }
 }
 
@@ -163,6 +176,18 @@
   .shadow-gold {
     box-shadow: var(--shadow-gold);
   }
+
+  /** Full-page line grid (matches cinematic footer texture); fixed behind content */
+  .site-page-grid {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-size: 56px 56px;
+    background-image:
+      linear-gradient(to right, hsl(var(--foreground) / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+  }
 }
 
 @keyframes fade-up {
@@ -191,5 +216,63 @@
   }
   .animate-fade-in {
     animation: fade-in 0.5s ease-out forwards;
+  }
+  .animate-appear {
+    animation: appear 0.5s ease-out forwards;
+  }
+  .animate-appear-zoom {
+    animation: appear-zoom 0.5s ease-out forwards;
+  }
+  .animate-scaleUp {
+    animation: scaleUp 0.45s ease-out forwards;
+  }
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+  .delay-700 {
+    animation-delay: 700ms;
+  }
+  .delay-1000 {
+    animation-delay: 1000ms;
+  }
+  .fade-bottom {
+    mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  }
+}
+
+@keyframes appear {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes appear-zoom {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleUp {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }

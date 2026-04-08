@@ -1,92 +1,160 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Building2, CheckCircle2, Landmark, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import * as PricingCard from "@/components/ui/pricing-card";
+import { cn } from "@/lib/utils";
 
-const plans = [
+type PlanVariant = "default" | "outline" | "secondary";
+
+const plans: Array<{
+  name: string;
+  description: string;
+  icon: ReactNode;
+  price: string;
+  period?: string;
+  original?: string;
+  badge?: string;
+  variant: PlanVariant;
+  href: string;
+  cta: string;
+  features: string[];
+}> = [
   {
     name: "Starter",
+    description: "For small gated communities",
+    icon: <Users className="text-primary" />,
     price: "$99",
     period: "/estate/month",
-    description: "For small gated communities",
-    features: ["Up to 50 units", "QR visitor access", "Security dashboard", "Incident reporting", "Email support"],
-    highlighted: false,
+    variant: "outline",
+    href: "/signup",
+    cta: "Get started",
+    features: [
+      "Up to 50 units",
+      "QR visitor access",
+      "Security dashboard",
+      "Incident reporting",
+      "Email support",
+    ],
   },
   {
     name: "Professional",
-    price: "$249",
-    period: "/estate/month",
     description: "For premium estates & towers",
-    features: ["Up to 200 units", "Everything in Starter", "Payments & billing", "Analytics & reports", "WhatsApp integration", "Priority support"],
-    highlighted: true,
+    icon: <Building2 className="text-primary" />,
+    badge: "Popular",
+    price: "$249",
+    original: "$299",
+    period: "/estate/month",
+    variant: "default",
+    href: "/signup",
+    cta: "Get started",
+    features: [
+      "Up to 200 units",
+      "Everything in Starter",
+      "Payments & billing",
+      "Analytics & reports",
+      "WhatsApp integration",
+      "Priority support",
+    ],
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "",
     description: "For estate portfolios & developers",
-    features: ["Unlimited units", "Everything in Professional", "Multi-estate management", "IoT & CCTV integration", "Custom SLA", "Dedicated account manager"],
-    highlighted: false,
+    icon: <Landmark className="text-primary" />,
+    price: "Custom",
+    variant: "outline",
+    href: "/support",
+    cta: "Contact sales",
+    features: [
+      "Unlimited units",
+      "Everything in Professional",
+      "Multi-estate management",
+      "IoT & CCTV integration",
+      "Custom SLA",
+      "Dedicated account manager",
+    ],
   },
-] as const;
+];
 
 export function PricingSection() {
   return (
-    <section id="pricing" className="py-24 bg-gradient-cream">
-      <div className="container mx-auto px-6">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Pricing</p>
-          <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Simple, Transparent Pricing
+    <section
+      id="pricing"
+      className={cn(
+        "relative overflow-hidden bg-gradient-cream py-24",
+        "scroll-mt-20",
+      )}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(hsl(220 20% 14% / 0.06) 0.8px, transparent 0.8px)",
+          backgroundSize: "14px 14px",
+          maskImage:
+            "radial-gradient(circle at 50% 10%, rgba(0,0,0,1), rgba(0,0,0,0.25) 45%, rgba(0,0,0,0) 72%)",
+        }}
+      />
+
+      <div
+        aria-hidden
+        className="absolute inset-0 isolate hidden opacity-70 contain-strict lg:block"
+      >
+        <div className="absolute top-0 left-0 h-[320px] w-[140px] -translate-y-[87.5%] -rotate-45 rounded-full bg-[radial-gradient(68.54%_68.72%_at_55.02%_31.46%,hsl(38_65%_50%_/_0.09)_0,hsl(38_65%_50%_/_0.02)_50%,transparent_80%)]" />
+        <div className="absolute top-0 left-0 h-[320px] w-60 [translate:5%_-50%] -rotate-45 rounded-full bg-[radial-gradient(50%_50%_at_50%_50%,hsl(40_60%_70%_/_0.07)_0,hsl(38_65%_50%_/_0.02)_80%,transparent_100%)]" />
+        <div className="absolute top-0 left-0 h-[320px] w-60 -translate-y-[87.5%] -rotate-45 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(38_65%_50%_/_0.05)_0,hsl(220_20%_14%_/_0.02)_80%,transparent_100%)]" />
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-6xl px-6">
+        <div className="mx-auto mb-16 max-w-2xl text-center">
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Pricing</p>
+          <h2 className="font-display mb-4 text-3xl font-bold text-foreground sm:text-4xl">
+            Simple, transparent pricing
           </h2>
-          <p className="text-muted-foreground text-lg">Start with what you need. Scale as you grow.</p>
+          <p className="text-lg text-muted-foreground">
+            Start with what you need. Scale as your estate grows.
+          </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className="grid justify-center gap-6 md:grid-cols-3 md:justify-items-center">
           {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`rounded-2xl p-8 transition-all duration-300 ${
-                plan.highlighted
-                  ? "bg-foreground text-primary-foreground shadow-elevated scale-[1.02]"
-                  : "bg-card border border-border shadow-soft hover:shadow-card"
-              }`}
-            >
-              <p className={`text-sm font-semibold mb-1 ${plan.highlighted ? "text-gold-light" : "text-primary"}`}>
-                {plan.name}
-              </p>
-              <div className="flex items-baseline gap-1 mb-2">
-                <span className="text-4xl font-display font-bold">{plan.price}</span>
-                <span className={`text-sm ${plan.highlighted ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                  {plan.period}
-                </span>
-              </div>
-              <p className={`text-sm mb-8 ${plan.highlighted ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                {plan.description}
-              </p>
+            <PricingCard.Card className="w-full max-w-sm md:min-w-[260px]" key={plan.name}>
+              <PricingCard.Header>
+                <PricingCard.Plan>
+                  <PricingCard.PlanName>
+                    {plan.icon}
+                    <span className="text-muted-foreground">{plan.name}</span>
+                  </PricingCard.PlanName>
+                  {plan.badge ? <PricingCard.Badge>{plan.badge}</PricingCard.Badge> : null}
+                </PricingCard.Plan>
+                <PricingCard.Price>
+                  <PricingCard.MainPrice>{plan.price}</PricingCard.MainPrice>
+                  {plan.period ? <PricingCard.Period>{plan.period}</PricingCard.Period> : null}
+                  {plan.original ? (
+                    <PricingCard.OriginalPrice>{plan.original}</PricingCard.OriginalPrice>
+                  ) : null}
+                </PricingCard.Price>
+                <Button variant={plan.variant} className="w-full font-semibold" asChild>
+                  <Link href={plan.href}>{plan.cta}</Link>
+                </Button>
+              </PricingCard.Header>
 
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm">
-                    <Check className={`h-4 w-4 shrink-0 ${plan.highlighted ? "text-gold-light" : "text-primary"}`} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href="/dashboard"
-                className={`inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium ${
-                  plan.highlighted
-                    ? "bg-gradient-gold text-primary-foreground shadow-gold hover:opacity-90"
-                    : "border border-border bg-background hover:bg-muted"
-                }`}
-              >
-                {plan.price === "Custom" ? "Contact Sales" : "Get Started"}
-              </Link>
-            </div>
+              <PricingCard.Body>
+                <PricingCard.Description>{plan.description}</PricingCard.Description>
+                <PricingCard.List>
+                  {plan.features.map((item) => (
+                    <PricingCard.ListItem key={item}>
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                      <span>{item}</span>
+                    </PricingCard.ListItem>
+                  ))}
+                </PricingCard.List>
+              </PricingCard.Body>
+            </PricingCard.Card>
           ))}
         </div>
       </div>
     </section>
   );
 }
-
