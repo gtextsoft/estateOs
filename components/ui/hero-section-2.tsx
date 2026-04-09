@@ -35,7 +35,7 @@ export function HeroSection() {
         <section>
           <div className="relative pt-10 md:pt-14">
             <div className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]" />
-            <div className="mx-auto max-w-5xl px-6">
+            <div className="mx-auto max-w-5xl px-4 sm:px-6">
               <div className="sm:mx-auto lg:mr-auto">
                 <AnimatedGroup
                   variants={{
@@ -50,17 +50,17 @@ export function HeroSection() {
                     ...transitionVariants,
                   }}
                 >
-                  <h1 className="font-display mt-8 max-w-2xl text-balance text-5xl font-medium tracking-tight md:text-6xl lg:mt-16">
+                  <h1 className="font-display mt-6 max-w-2xl text-balance text-4xl font-medium tracking-tight sm:text-5xl md:text-6xl sm:mt-8 lg:mt-16">
                     The Operating System for{" "}
                     <span className="text-gradient-gold">Luxury Estates</span>
                   </h1>
-                  <p className="mt-8 max-w-2xl text-pretty text-lg text-muted-foreground">
+                  <p className="mt-6 max-w-2xl text-pretty text-base text-muted-foreground sm:mt-8 sm:text-lg">
                     Seamless visitor access, real-time security monitoring, and intelligent estate operations
                     all in one elegant platform.
                   </p>
-                  <div className="mt-12 flex flex-wrap items-center gap-2">
-                    <div className="rounded-[14px] border border-border/60 bg-foreground/5 p-0.5">
-                      <Button asChild size="lg" className="rounded-xl px-5 text-base shadow-gold">
+                  <div className="mt-8 flex flex-col gap-3 sm:mt-12 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                    <div className="w-full rounded-[14px] border border-border/60 bg-foreground/5 p-0.5 sm:w-auto">
+                      <Button asChild size="lg" className="w-full rounded-xl px-5 text-base shadow-gold sm:w-auto">
                         <Link href="/dashboard">
                           <span className="text-nowrap">Start Free Trial</span>
                         </Link>
@@ -70,7 +70,7 @@ export function HeroSection() {
                       asChild
                       size="lg"
                       variant="ghost"
-                      className="h-[42px] rounded-xl px-5 text-base"
+                      className="h-[42px] w-full rounded-xl px-5 text-base sm:w-auto"
                     >
                       <Link href="#how-it-works">
                         <span className="text-nowrap">See How It Works</span>
@@ -115,14 +115,14 @@ export function HeroSection() {
           </div>
         </section>
         <section className="bg-background pb-16 pt-16 md:pb-32">
-          <div className="group relative m-auto max-w-5xl px-6">
+          <div className="group relative m-auto max-w-5xl px-4 sm:px-6">
             <div className="absolute inset-0 z-10 flex scale-95 items-center justify-center opacity-0 duration-500 group-hover:scale-100 group-hover:opacity-100">
               <Link href="#features" className="block text-sm duration-150 hover:opacity-75">
                 <span> Explore platform features</span>
                 <ChevronRight className="ml-1 inline-block size-3" />
               </Link>
             </div>
-            <div className="mx-auto mt-12 grid max-w-2xl grid-cols-4 gap-x-12 gap-y-8 transition-all duration-500 group-hover:opacity-50 group-hover:blur-sm sm:gap-x-16 sm:gap-y-14">
+            <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-x-8 gap-y-6 transition-all duration-500 group-hover:opacity-50 group-hover:blur-sm sm:grid-cols-4 sm:gap-x-16 sm:gap-y-14 sm:mt-12">
               {[
                 { src: "https://html.tailus.io/blocks/customers/nvidia.svg", alt: "Nvidia", h: "h-5" },
                 { src: "https://html.tailus.io/blocks/customers/column.svg", alt: "Column", h: "h-4" },

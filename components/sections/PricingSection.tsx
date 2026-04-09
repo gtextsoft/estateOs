@@ -106,7 +106,7 @@ export function PricingSection() {
         <div className="absolute top-0 left-0 h-[320px] w-60 -translate-y-[87.5%] -rotate-45 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(38_65%_50%_/_0.05)_0,hsl(220_20%_14%_/_0.02)_80%,transparent_100%)]" />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Pricing</p>
           <h2 className="font-display mb-4 text-3xl font-bold text-foreground sm:text-4xl">

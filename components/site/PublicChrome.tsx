@@ -6,7 +6,7 @@ import { Navbar } from "@/components/site/Navbar";
 export function PublicChrome({ children }: { children: ReactNode }) {
   return (
     <>
-      <div className="relative z-10 px-4 pt-2 md:px-6 md:pt-4">
+      <div className="relative z-10 px-3 pt-2 sm:px-4 md:px-6 md:pt-4">
         <Navbar />
       </div>
       <main className="relative z-10 min-h-[70vh]">{children}</main>

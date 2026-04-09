@@ -231,7 +231,7 @@ export function SignInFormInner({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="animate-element animate-delay-100 text-4xl leading-tight font-semibold md:text-5xl">{title}</h1>
+      <h1 className="animate-element animate-delay-100 text-3xl leading-tight font-semibold sm:text-4xl md:text-5xl">{title}</h1>
       <p className="animate-element animate-delay-200 text-muted-foreground">{description}</p>
 
       <form className="space-y-5" onSubmit={onSignIn}>
@@ -275,7 +275,7 @@ export function SignInFormInner({
           </GlassInputWrapper>
         </div>
 
-        <div className="animate-element animate-delay-500 flex items-center justify-between text-sm">
+        <div className="animate-element animate-delay-500 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <label className="flex cursor-pointer items-center gap-3">
             <input type="checkbox" name="rememberMe" className="custom-checkbox" />
             <span className="text-foreground/90">Keep me signed in</span>
@@ -380,7 +380,7 @@ export function SignUpFormInner({
 }: SignUpFormProps) {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="animate-element animate-delay-100 text-4xl leading-tight font-semibold md:text-5xl">{title}</h1>
+      <h1 className="animate-element animate-delay-100 text-3xl leading-tight font-semibold sm:text-4xl md:text-5xl">{title}</h1>
       <p className="animate-element animate-delay-200 text-muted-foreground">{description}</p>
 
       <form className="space-y-4" onSubmit={onSignUp}>
@@ -610,7 +610,7 @@ function AuthSplitShell({
 }) {
   return (
     <div className="flex min-h-dvh w-full flex-col font-sans md:flex-row">
-      <section className="flex flex-1 items-center justify-center p-8">
+      <section className="flex flex-1 items-center justify-center px-4 py-8 sm:px-6 sm:py-10 md:p-8">
         <div className="w-full max-w-md">{leftColumn}</div>
       </section>
       {heroImageSrc ? <HeroColumn heroImageSrc={heroImageSrc} testimonials={testimonials} /> : null}

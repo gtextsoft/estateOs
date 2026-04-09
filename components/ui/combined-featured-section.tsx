@@ -101,8 +101,8 @@ const activityMessages: Message[] = [
 
 export default function CombinedFeaturedSection() {
   return (
-    <section id="features" className="bg-gradient-cream py-24">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 px-6 md:grid-cols-2 md:grid-rows-2">
+    <section id="features" className="overflow-x-hidden bg-gradient-cream py-16 sm:py-20 md:py-24">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 px-4 sm:px-6 md:grid-cols-2 md:grid-rows-2">
         <div className="relative overflow-hidden rounded-none border border-border bg-muted p-4">
           <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin className="h-4 w-4" />
@@ -187,7 +187,7 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="relative flex flex-col gap-3 border border-border bg-background p-4 transition">
+    <div className="relative flex min-h-[260px] flex-col gap-3 border border-border bg-background p-4 pb-24 transition sm:min-h-0 sm:pb-4">
       <div className="flex items-center gap-4">
         <div>
           <span className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">

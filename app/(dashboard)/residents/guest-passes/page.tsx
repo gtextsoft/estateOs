@@ -269,13 +269,13 @@ export default function ResidentGuestPassesPage() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pass type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
               {(["single", "service", "permanent"] as PassType[]).map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => setGuestType(t)}
-                  className={`h-10 rounded-lg border text-xs font-semibold transition-colors ${
+                  className={`h-10 min-w-0 rounded-lg border px-1 text-[10px] font-semibold leading-tight transition-colors sm:px-2 sm:text-xs ${
                     guestType === t ? "border-primary bg-primary/5 text-primary" : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >

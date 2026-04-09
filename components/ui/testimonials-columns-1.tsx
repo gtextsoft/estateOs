@@ -34,7 +34,7 @@ export function TestimonialsColumn(props: {
           <React.Fragment key={colIndex}>
             {testimonials.map((item, i) => (
               <div
-                className="w-full max-w-xs rounded-3xl border border-border bg-card p-8 shadow-lg shadow-primary/10"
+                className="w-full max-w-xs rounded-3xl border border-border bg-card p-5 shadow-lg shadow-primary/10 sm:p-8"
                 key={`${colIndex}-${item.name}-${i}`}
               >
                 <p className="text-sm leading-relaxed text-foreground">{item.text}</p>

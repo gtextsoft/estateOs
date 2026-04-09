@@ -70,7 +70,7 @@ const thirdColumn = testimonials.slice(6, 9);
 export function TestimonialsSection() {
   return (
     <section id="testimonials" className="relative my-20 scroll-mt-24 bg-background">
-      <div className="container z-10 mx-auto px-6">
+      <div className="container z-10 mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -92,7 +92,7 @@ export function TestimonialsSection() {
           </p>
         </motion.div>
 
-        <div className="mx-auto mt-10 flex max-h-[740px] justify-center gap-6 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_25%,black_75%,transparent)]">
+        <div className="mx-auto mt-8 flex max-h-[min(740px,75vh)] justify-center gap-4 overflow-hidden px-1 sm:mt-10 sm:gap-6 sm:px-0 [mask-image:linear-gradient(to_bottom,transparent,black_25%,black_75%,transparent)]">
           <TestimonialsColumn testimonials={firstColumn} duration={15} />
           <TestimonialsColumn testimonials={secondColumn} className="hidden md:block" duration={19} />
           <TestimonialsColumn testimonials={thirdColumn} className="hidden lg:block" duration={17} />

@@ -67,7 +67,7 @@ export function HowItWorksSection() {
         className="pointer-events-none absolute -left-32 bottom-0 h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,hsl(220_20%_14%_/_0.04),transparent_70%)]"
       />
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         <div className="grid items-start gap-14 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-5 lg:sticky lg:top-28">
             <motion.div

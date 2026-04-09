@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
+import jsQR from "jsqr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -58,8 +59,8 @@ export default function SecurityScannerPage() {
   const [lastScan, setLastScan] = useState<{ ok: boolean; event: SecurityEventRecord } | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [cameraNotice, setCameraNotice] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
   const [manualReason, setManualReason] = useState("");
   const [manualCode, setManualCode] = useState("");
   const [manualBusy, setManualBusy] = useState(false);
@@ -67,6 +68,9 @@ export default function SecurityScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
+  const detectBusyRef = useRef(false);
+  const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const refresh = () => {
     if (isApiMode()) {
@@ -119,7 +123,26 @@ export default function SecurityScannerPage() {
       v.srcObject = null;
     }
     setCameraReady(false);
-    setIsDetecting(false);
+    detectBusyRef.current = false;
+    detectorRef.current = null;
+  };
+
+  const decodeWithJsQr = (video: HTMLVideoElement) => {
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement("canvas");
+    }
+    const canvas = canvasRef.current;
+    const width = video.videoWidth || video.clientWidth;
+    const height = video.videoHeight || video.clientHeight;
+    if (!width || !height) return "";
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "";
+    ctx.drawImage(video, 0, 0, width, height);
+    const image = ctx.getImageData(0, 0, width, height);
+    const decoded = jsQR(image.data, width, height, { inversionAttempts: "attemptBoth" });
+    return extractCode(decoded?.data ?? "");
   };
 
   useEffect(() => {
@@ -130,6 +153,7 @@ export default function SecurityScannerPage() {
     if (!cameraOpen) {
       stopCamera();
       setCameraError("");
+      setCameraNotice("");
       return;
     }
 
@@ -140,10 +164,8 @@ export default function SecurityScannerPage() {
         setCameraError("Camera API not available in this browser.");
         return;
       }
-      if (!BarcodeDetectorImpl) {
-        setCameraError("Live QR detection is not supported in this browser. Use Chrome on mobile/desktop.");
-        return;
-      }
+      setCameraError("");
+      setCameraNotice("");
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
@@ -159,15 +181,23 @@ export default function SecurityScannerPage() {
         v.srcObject = stream;
         await v.play();
         setCameraReady(true);
-        const detector = new BarcodeDetectorImpl({ formats: ["qr_code"] });
+        detectorRef.current = BarcodeDetectorImpl ? new BarcodeDetectorImpl({ formats: ["qr_code"] }) : null;
+        if (!detectorRef.current) {
+          setCameraNotice("Using fallback decoder. Hold steady and ensure QR is well-lit.");
+        }
         const loop = async () => {
           if (!cameraOpen || cancelled) return;
-          if (v.readyState >= 2 && !isDetecting) {
-            setIsDetecting(true);
+          if (v.readyState >= 2 && !detectBusyRef.current) {
+            detectBusyRef.current = true;
             try {
-              const found = await detector.detect(v);
-              const raw = found.find((x) => x.rawValue)?.rawValue ?? "";
-              const code = extractCode(raw);
+              let code = "";
+              if (detectorRef.current) {
+                const found = await detectorRef.current.detect(v);
+                const raw = found.find((x) => x.rawValue)?.rawValue ?? "";
+                code = extractCode(raw);
+              } else {
+                code = decodeWithJsQr(v);
+              }
               if (code) {
                 if (isApiMode()) {
                   void (async () => {
@@ -197,7 +227,7 @@ export default function SecurityScannerPage() {
             } catch {
               // ignore single-frame detection failures
             } finally {
-              setIsDetecting(false);
+              detectBusyRef.current = false;
             }
           }
           rafRef.current = window.requestAnimationFrame(loop);
@@ -213,7 +243,7 @@ export default function SecurityScannerPage() {
       cancelled = true;
       stopCamera();
     };
-  }, [cameraOpen, gateId, isDetecting]);
+  }, [cameraOpen, gateId]);
 
   const recent = useMemo(
     () =>
@@ -304,10 +334,19 @@ export default function SecurityScannerPage() {
           </Select>
         </div>
         <Input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Visitor code or resident code" />
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant="outline" onClick={() => submit("auto")}>Auto</Button>
-          <Button variant="outline" onClick={() => submit("entry")}>Entry</Button>
-          <Button className="bg-destructive text-destructive-foreground" onClick={() => submit("exit")}>Exit</Button>
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
+          <Button variant="outline" className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm" onClick={() => submit("auto")}>
+            Auto
+          </Button>
+          <Button variant="outline" className="min-w-0 px-2 text-xs sm:px-3 sm:text-sm" onClick={() => submit("entry")}>
+            Entry
+          </Button>
+          <Button
+            className="min-w-0 bg-destructive px-2 text-xs text-destructive-foreground sm:px-3 sm:text-sm"
+            onClick={() => submit("exit")}
+          >
+            Exit
+          </Button>
         </div>
         <Button variant="outline" onClick={() => setCameraOpen(true)}>
           <Camera className="h-4 w-4 mr-2" />
@@ -412,6 +451,9 @@ export default function SecurityScannerPage() {
           )}
           {cameraError && (
             <p className="text-sm text-destructive">{cameraError}</p>
+          )}
+          {!cameraError && cameraNotice && (
+            <p className="text-xs text-muted-foreground">{cameraNotice}</p>
           )}
         </div>
       </Modal>

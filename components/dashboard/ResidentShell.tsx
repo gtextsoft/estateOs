@@ -249,12 +249,12 @@ export function ResidentShell({
       )}
 
       <main className="flex-1 min-w-0 flex flex-col min-h-dvh">
-        <header className="h-16 border-b border-border flex items-center justify-between gap-3 px-6 shrink-0">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+        <header className="h-16 border-b border-border flex items-center justify-between gap-3 px-4 sm:px-6 shrink-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <button type="button" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
               <Menu className="h-5 w-5" />
             </button>
-            <h2 className="font-display text-lg font-semibold text-foreground truncate lg:block">{title}</h2>
+            <h2 className="font-display truncate text-base font-semibold text-foreground sm:text-lg">{title}</h2>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative" ref={notifRef}>
@@ -276,7 +276,7 @@ export function ResidentShell({
               </Button>
 
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-xl shadow-card overflow-hidden z-50">
+                <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] sm:w-80 bg-card border border-border rounded-xl shadow-card overflow-hidden z-50">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                     <p className="font-display text-sm font-semibold text-foreground">Notifications</p>
                     <Link
@@ -341,7 +341,7 @@ export function ResidentShell({
               </button>
 
               {userOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-card overflow-hidden z-50">
+                <div className="absolute right-0 mt-2 w-[min(18rem,calc(100vw-2rem))] sm:w-72 bg-card border border-border rounded-xl shadow-card overflow-hidden z-50">
                   <div className="px-4 py-3 border-b border-border">
                     <p className="text-sm font-semibold text-foreground">{user.name}</p>
                     <p className="text-xs text-muted-foreground">Unit {user.unit}</p>
@@ -382,7 +382,7 @@ export function ResidentShell({
             </div>
           </div>
         </header>
-        <div className="flex-1 p-6 overflow-x-hidden">{children}</div>
+        <div className="flex-1 overflow-x-hidden p-4 sm:p-6">{children}</div>
       </main>
     </div>
   );
