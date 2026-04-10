@@ -6,10 +6,10 @@ import { Navbar } from "@/components/site/Navbar";
 export function PublicChrome({ children }: { children: ReactNode }) {
   return (
     <>
-      <div className="relative z-10 px-3 pt-2 sm:px-4 md:px-6 md:pt-4">
-        <Navbar />
-      </div>
-      <main className="relative z-10 min-h-[70vh]">{children}</main>
+      {/* Reserve space for fixed navbar (pt + nav height matches header-2) */}
+      <div className="h-18 shrink-0 md:h-20" aria-hidden />
+      <Navbar />
+      <main className="relative z-10 min-h-[70vh] min-w-0">{children}</main>
     </>
   );
 }

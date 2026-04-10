@@ -93,7 +93,7 @@ export function HeroSection() {
                 ...transitionVariants,
               }}
             >
-              <div className="relative -mr-56 mt-8 overflow-hidden px-2 sm:mr-0 sm:mt-12 md:mt-20">
+              <div className="relative mt-8 w-full max-w-full overflow-hidden px-4 sm:mt-12 sm:px-6 md:mt-20">
                 <div
                   aria-hidden
                   className="absolute inset-0 z-10 bg-linear-to-b from-transparent from-35% to-background"

@@ -16,7 +16,7 @@ export default function TestimonialsPage() {
         </Link>{" "}
         / Testimonials
       </div>
-      <TestimonialsSection />
+      <TestimonialsSection variant="static" />
     </div>
   );
 }

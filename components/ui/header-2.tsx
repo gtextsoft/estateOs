@@ -36,22 +36,28 @@ export function Header() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-[100] mx-auto w-full max-w-5xl border-b border-transparent md:rounded-md md:border md:transition-all md:ease-out",
+        "fixed inset-x-0 top-0 z-[100] mx-auto w-full max-w-5xl border-b border-transparent px-3 pt-2 sm:px-4 md:px-6 md:pt-4 md:rounded-md md:border md:transition-all md:ease-out",
         {
-          "border-border bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/50 md:top-4 md:max-w-4xl md:shadow":
+          "border-border bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/50 md:max-w-4xl md:shadow":
             scrolled && !open,
           "bg-background/90": open,
         },
       )}
     >
       <nav
-        className={cn("flex h-14 w-full items-center justify-between px-3 sm:px-4 md:h-12 md:transition-all md:ease-out", {
+        className={cn("flex h-16 w-full items-center justify-between px-3 sm:px-4 md:transition-all md:ease-out", {
           "md:px-2": scrolled,
         })}
       >
-        <Link href="/" className="flex items-center gap-2 text-foreground" aria-label="EstateOS home">
-          <Image src="/assets/logo.png" alt="EstateOS" width={32} height={32} className="h-8 w-auto" />
-          <span className="font-display text-base font-semibold tracking-tight">EstateOS</span>
+        <Link href="/" className="flex shrink-0 items-center text-foreground" aria-label="EstateOS home">
+          <Image
+            src="/assets/logo.png"
+            alt="EstateOS"
+            width={72}
+            height={72}
+            className="h-14 w-auto sm:h-16"
+            priority
+          />
         </Link>
 
         <div className="hidden items-center gap-2 md:flex">
@@ -83,7 +89,7 @@ export function Header() {
 
       <div
         className={cn(
-          "fixed top-14 right-0 bottom-0 left-0 z-[90] flex flex-col overflow-hidden border-y bg-background/90 md:hidden",
+          "fixed top-18 right-0 bottom-0 left-0 z-[90] flex flex-col overflow-hidden border-y bg-background/90 md:hidden",
           open ? "block" : "hidden",
         )}
       >

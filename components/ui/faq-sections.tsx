@@ -38,8 +38,8 @@ export default function FaqSections() {
 
   return (
     <section id="faq" className="bg-background py-16 sm:py-20">
-      <div className="mx-auto flex max-w-6xl flex-col items-start justify-center gap-8 px-4 sm:px-6 md:flex-row md:gap-10">
-        <div className="w-full md:max-w-sm">
+      <div className="mx-auto flex min-w-0 max-w-6xl flex-col items-start justify-center gap-8 px-4 sm:px-6 md:flex-row md:gap-10">
+        <div className="w-full min-w-0 md:max-w-sm">
           <div className="relative aspect-5/6 overflow-hidden rounded-xl border border-border">
             <Image
               src="https://images.unsplash.com/photo-1555212697-194d092e3b8f?q=80&w=830&h=844&auto=format&fit=crop"
@@ -51,9 +51,9 @@ export default function FaqSections() {
           </div>
         </div>
 
-        <div className="w-full md:flex-1">
+        <div className="w-full min-w-0 md:flex-1">
           <p className="text-sm font-medium text-primary">FAQ&apos;s</p>
-          <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
+          <h2 className="font-display text-balance text-2xl font-semibold text-foreground sm:text-3xl">
             Looking for answer?
           </h2>
           <p className="mt-2 pb-4 text-sm text-muted-foreground">
@@ -67,11 +67,13 @@ export default function FaqSections() {
               key={faq.question}
               onClick={() => setOpenIndex(openIndex === index ? null : index)}
             >
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-base font-medium text-foreground">{faq.question}</h3>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="min-w-0 flex-1 text-base font-medium leading-snug text-foreground">
+                  {faq.question}
+                </h3>
                 <ChevronDown
                   className={cn(
-                    "h-[18px] w-[18px] text-foreground transition-all duration-500 ease-in-out",
+                    "mt-0.5 h-[18px] w-[18px] shrink-0 text-foreground transition-all duration-500 ease-in-out",
                     openIndex === index && "rotate-180",
                   )}
                 />

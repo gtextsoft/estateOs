@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import {
+  TestimonialQuoteCard,
   TestimonialsColumn,
   type Testimonial,
 } from "@/components/ui/testimonials-columns-1";
@@ -67,10 +68,24 @@ const firstColumn = testimonials.slice(0, 3);
 const secondColumn = testimonials.slice(3, 6);
 const thirdColumn = testimonials.slice(6, 9);
 
-export function TestimonialsSection() {
+export function TestimonialsSection({
+  variant = "marquee",
+}: {
+  /** Use `static` on the full testimonials page — readable grid, no scrolling columns. */
+  variant?: "marquee" | "static";
+}) {
+  const isStatic = variant === "static";
+
   return (
-    <section id="testimonials" className="relative my-20 scroll-mt-24 bg-background">
-      <div className="container z-10 mx-auto px-4 sm:px-6">
+    <section
+      id="testimonials"
+      className={
+        isStatic
+          ? "relative my-10 scroll-mt-24 sm:my-14"
+          : "relative my-16 scroll-mt-24 bg-background sm:my-20"
+      }
+    >
+      <div className="container z-10 mx-auto min-w-0 max-w-full px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -84,7 +99,7 @@ export function TestimonialsSection() {
             </div>
           </div>
 
-          <h2 className="mt-5 text-center font-display text-xl font-bold tracking-tighter sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl">
+          <h2 className="mt-5 text-balance text-center font-display text-xl font-bold tracking-tighter sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl">
             What estates say about EstateOS
           </h2>
           <p className="mt-5 text-center text-muted-foreground">
@@ -92,11 +107,27 @@ export function TestimonialsSection() {
           </p>
         </motion.div>
 
-        <div className="mx-auto mt-8 flex max-h-[min(740px,75vh)] justify-center gap-4 overflow-hidden px-1 sm:mt-10 sm:gap-6 sm:px-0 [mask-image:linear-gradient(to_bottom,transparent,black_25%,black_75%,transparent)]">
-          <TestimonialsColumn testimonials={firstColumn} duration={15} />
-          <TestimonialsColumn testimonials={secondColumn} className="hidden md:block" duration={19} />
-          <TestimonialsColumn testimonials={thirdColumn} className="hidden lg:block" duration={17} />
-        </div>
+        {isStatic ? (
+          <div className="mx-auto mt-10 grid w-full max-w-5xl grid-cols-1 gap-5 sm:mt-12 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+            {testimonials.map((item, index) => (
+              <TestimonialQuoteCard key={`${item.name}-${index}`} item={item} />
+            ))}
+          </div>
+        ) : (
+          <div className="mx-auto mt-8 flex max-h-[min(680px,78svh)] min-w-0 items-start justify-center gap-4 overflow-hidden px-2 sm:mt-10 sm:max-h-[min(760px,80vh)] sm:gap-5 sm:px-4 [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)]">
+            <TestimonialsColumn testimonials={firstColumn} className="min-w-0" duration={18} />
+            <TestimonialsColumn
+              testimonials={secondColumn}
+              className="hidden min-w-0 md:flex"
+              duration={18}
+            />
+            <TestimonialsColumn
+              testimonials={thirdColumn}
+              className="hidden min-w-0 lg:flex"
+              duration={18}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

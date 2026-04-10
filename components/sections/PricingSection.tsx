@@ -81,7 +81,7 @@ export function PricingSection() {
     <section
       id="pricing"
       className={cn(
-        "relative overflow-hidden bg-gradient-cream py-24",
+        "relative overflow-x-hidden bg-gradient-cream py-16 sm:py-20 md:py-24",
         "scroll-mt-20",
       )}
     >
@@ -106,18 +106,18 @@ export function PricingSection() {
         <div className="absolute top-0 left-0 h-[320px] w-60 -translate-y-[87.5%] -rotate-45 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(38_65%_50%_/_0.05)_0,hsl(220_20%_14%_/_0.02)_80%,transparent_100%)]" />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto mb-16 max-w-2xl text-center">
+      <div className="relative z-10 mx-auto min-w-0 max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Pricing</p>
-          <h2 className="font-display mb-4 text-3xl font-bold text-foreground sm:text-4xl">
+          <h2 className="font-display mb-4 text-balance text-3xl font-bold text-foreground sm:text-4xl">
             Simple, transparent pricing
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-base text-muted-foreground sm:text-lg">
             Start with what you need. Scale as your estate grows.
           </p>
         </div>
 
-        <div className="grid justify-center gap-6 md:grid-cols-3 md:justify-items-center">
+        <div className="grid min-w-0 justify-center gap-6 sm:max-w-lg sm:mx-auto md:max-w-none md:mx-0 md:grid-cols-3 md:justify-items-center">
           {plans.map((plan) => (
             <PricingCard.Card className="w-full max-w-sm md:min-w-[260px]" key={plan.name}>
               <PricingCard.Header>
