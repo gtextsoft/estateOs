@@ -10,7 +10,14 @@ import {
   type SignUpFormProps,
   type Testimonial,
 } from "@/components/ui/sign-in";
-import { loginEmailRequest, loginLegacyRequest, resolveEstateSlug, signupRequest } from "@/lib/estate-api";
+import {
+  confirmVerificationCode,
+  loginEmailRequest,
+  loginLegacyRequest,
+  requestVerificationCode,
+  resolveEstateSlug,
+  signupRequest,
+} from "@/lib/estate-api";
 import { isApiMode, setSession } from "@/lib/session";
 
 const HERO_IMAGE =
@@ -87,6 +94,12 @@ export function AuthClient() {
   const [building, setBuilding] = useState("");
   const [block, setBlock] = useState("");
   const [notes, setNotes] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  const [verificationRequested, setVerificationRequested] = useState(false);
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [verificationInlineCode, setVerificationInlineCode] = useState<string | null>(null);
+  const legacyAuthEnabled = process.env.NEXT_PUBLIC_ALLOW_LEGACY_AUTH === "true";
 
   const emailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -173,6 +186,10 @@ export function AuthClient() {
         setError("NEXT_PUBLIC_API_URL is not set");
         return;
       }
+      if (!verificationToken) {
+        setError("Verify your email with the code before creating an account.");
+        return;
+      }
       const res = await signupRequest({
         role,
         estateSlug: estateSlug.trim(),
@@ -188,6 +205,7 @@ export function AuthClient() {
           phone: phone.trim(),
           notes: notes.trim() || undefined,
         },
+        verificationToken,
       });
       setSession({
         token: res.token,
@@ -201,6 +219,51 @@ export function AuthClient() {
       setError(err instanceof Error ? err.message : "Signup failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestSignupVerification = async () => {
+    setError(null);
+    if (!isApiMode()) {
+      setError("NEXT_PUBLIC_API_URL is not set");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Enter your email first.");
+      return;
+    }
+    setVerificationBusy(true);
+    try {
+      const out = await requestVerificationCode({ email: email.trim(), intent: "signup" });
+      setVerificationRequested(true);
+      setVerificationToken(null);
+      setVerificationInlineCode(out.devCode ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send verification code");
+    } finally {
+      setVerificationBusy(false);
+    }
+  };
+
+  const confirmSignupVerification = async () => {
+    setError(null);
+    if (!email.trim() || !verificationCode.trim()) {
+      setError("Enter both email and verification code.");
+      return;
+    }
+    setVerificationBusy(true);
+    try {
+      const res = await confirmVerificationCode({
+        email: email.trim(),
+        intent: "signup",
+        code: verificationCode.trim(),
+      });
+      setVerificationToken(res.verificationToken);
+      setVerificationInlineCode(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid verification code");
+    } finally {
+      setVerificationBusy(false);
     }
   };
 
@@ -246,7 +309,7 @@ export function AuthClient() {
           </details>
         )}
 
-        {isApiMode() && (
+        {isApiMode() && legacyAuthEnabled && (
           <div className="border-t border-border pt-4">
             <button
               type="button"
@@ -315,7 +378,13 @@ export function AuthClient() {
     estateName,
     onVerifySlug: () => void checkSlug(),
     email,
-    onEmailChange: setEmail,
+    onEmailChange: (value) => {
+      setEmail(value);
+      setVerificationToken(null);
+      setVerificationRequested(false);
+      setVerificationCode("");
+      setVerificationInlineCode(null);
+    },
     password,
     onPasswordChange: setPassword,
     fullName,
@@ -330,6 +399,14 @@ export function AuthClient() {
     onBlockChange: setBlock,
     notes,
     onNotesChange: setNotes,
+    verificationCode,
+    onVerificationCodeChange: setVerificationCode,
+    onRequestVerificationCode: () => void requestSignupVerification(),
+    onConfirmVerificationCode: () => void confirmSignupVerification(),
+    verificationRequested,
+    verificationVerified: Boolean(verificationToken),
+    verificationBusy,
+    verificationInlineCode,
     error: mode === "signup" ? error : null,
     loading,
   };

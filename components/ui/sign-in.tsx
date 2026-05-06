@@ -80,6 +80,15 @@ export interface SignUpFormProps {
   onBlockChange: (v: string) => void;
   notes: string;
   onNotesChange: (v: string) => void;
+  verificationCode: string;
+  onVerificationCodeChange: (v: string) => void;
+  onRequestVerificationCode: () => void;
+  onConfirmVerificationCode: () => void;
+  verificationRequested: boolean;
+  verificationVerified: boolean;
+  verificationBusy?: boolean;
+  /** Shown when the API returns the code in-app (no transactional email configured). */
+  verificationInlineCode?: string | null;
   error?: string | null;
   loading?: boolean;
 }
@@ -375,6 +384,14 @@ export function SignUpFormInner({
   onBlockChange,
   notes,
   onNotesChange,
+  verificationCode,
+  onVerificationCodeChange,
+  onRequestVerificationCode,
+  onConfirmVerificationCode,
+  verificationRequested,
+  verificationVerified,
+  verificationBusy,
+  verificationInlineCode,
   error,
   loading,
 }: SignUpFormProps) {
@@ -444,7 +461,60 @@ export function SignUpFormInner({
               required
             />
           </GlassInputWrapper>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onRequestVerificationCode}
+              disabled={verificationBusy}
+              className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted/50 disabled:opacity-60"
+            >
+              {verificationRequested ? "Resend code" : "Send code"}
+            </button>
+            {verificationVerified ? (
+              <span className="text-xs font-medium text-emerald-600">Email verified</span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Verification is required before signup.</span>
+            )}
+          </div>
         </div>
+
+        {verificationRequested && (
+          <div className="animate-element animate-delay-400 space-y-3">
+            {verificationInlineCode ? (
+              <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm">
+                <p className="font-medium text-foreground">Your verification code</p>
+                <p className="mt-1 font-mono text-2xl tracking-[0.35em] text-foreground">{verificationInlineCode}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Email is not configured yet, so we show the code here. Add{" "}
+                  <span className="font-mono text-[0.7rem]">RESEND_API_KEY</span> and a verified sender when you have a
+                  domain.
+                </p>
+              </div>
+            ) : null}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Verification code</label>
+              <div className="mt-1 flex gap-2">
+                <GlassInputWrapper>
+                  <input
+                    value={verificationCode}
+                    onChange={(e) => onVerificationCodeChange(e.target.value)}
+                    className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
+                    placeholder="Enter 6-digit code"
+                    inputMode="numeric"
+                  />
+                </GlassInputWrapper>
+                <button
+                  type="button"
+                  onClick={onConfirmVerificationCode}
+                  disabled={verificationBusy || verificationVerified}
+                  className="shrink-0 rounded-2xl border border-border px-4 text-xs font-semibold transition-colors hover:bg-muted/50 disabled:opacity-60"
+                >
+                  {verificationVerified ? "Verified" : "Verify"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="animate-element animate-delay-400">
           <label className="text-sm font-medium text-muted-foreground">Password</label>
@@ -552,7 +622,7 @@ export function SignUpFormInner({
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !verificationVerified}
           className="animate-element animate-delay-700 w-full rounded-2xl bg-primary py-4 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
         >
           {loading ? "Submitting…" : "Submit application"}

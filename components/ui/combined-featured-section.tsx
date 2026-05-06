@@ -158,7 +158,7 @@ export default function CombinedFeaturedSection() {
         <div className="grid min-w-0 grid-cols-1 rounded-none bg-card sm:grid-cols-2">
           <FeatureCard
             icon={<Files className="h-4 w-4" />}
-            image="https://images.unsplash.com/photo-1600596542815-ffad4b1530a9?w=800&q=80"
+            image="https://www.manubes.com/wp-content/uploads/2025/08/qr-code-with-manubes-logo.png"
             title="QR visitor access"
             subtitle="Instant issuance"
             description="Secure passes your guards can scan in seconds."

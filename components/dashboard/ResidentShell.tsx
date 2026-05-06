@@ -21,8 +21,9 @@ import { Button } from "@/components/ui/button";
 import { loadNotifications, saveNotifications } from "@/components/resident/store";
 import type { ResidentNotification } from "@/components/resident/types";
 import { loadResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
-import { fetchMyNotifications, fetchMyProfile, logoutRequest } from "@/lib/estate-api";
-import { clearSession, getCurrentResidentId, isApiMode } from "@/lib/session";
+import { fetchMyNotifications, fetchMyProfile } from "@/lib/estate-api";
+import { getCurrentResidentId, isApiMode } from "@/lib/session";
+import { useRequireSession } from "@/lib/use-require-session";
 
 type NavItem = {
   icon: React.ElementType;
@@ -52,6 +53,7 @@ export function ResidentShell({
   children: React.ReactNode;
   roleLabel: string;
 }) {
+  const { ready, error, signOut, isEnabled } = useRequireSession(["resident"]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -68,6 +70,27 @@ export function ResidentShell({
     window.addEventListener("hashchange", readHash);
     return () => window.removeEventListener("hashchange", readHash);
   }, []);
+
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
+  }
+
+  if (error && isEnabled) {
+    return (
+      <div className="min-h-dvh bg-background p-6">
+        <div className="mx-auto max-w-lg space-y-4">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+          <Button onClick={() => void signOut()}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -220,18 +243,7 @@ export function ResidentShell({
             variant="ghost"
             className="w-full justify-start text-muted-foreground"
             onClick={() => {
-              void (async () => {
-                document.cookie = "estateos_role=; path=/; max-age=0";
-                if (isApiMode()) {
-                  try {
-                    await logoutRequest();
-                  } catch {
-                    /* ignore */
-                  }
-                  clearSession();
-                }
-                window.location.href = "/login";
-              })();
+              void signOut();
             }}
           >
             <LogOut className="h-4 w-4 mr-2" />
@@ -359,18 +371,7 @@ export function ResidentShell({
                       type="button"
                       className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       onClick={() => {
-                        void (async () => {
-                          document.cookie = "estateos_role=; path=/; max-age=0";
-                          if (isApiMode()) {
-                            try {
-                              await logoutRequest();
-                            } catch {
-                              /* ignore */
-                            }
-                            clearSession();
-                          }
-                          window.location.href = "/login";
-                        })();
+                        void signOut();
                       }}
                     >
                       <LogOut className="h-4 w-4" />

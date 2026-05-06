@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, List, LogOut, Menu, QrCode, Shield, Siren, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRequireSession } from "@/lib/use-require-session";
 
 const navItems = [
   { label: "Overview", href: "/security", icon: Home },
@@ -17,6 +18,28 @@ export function SecurityShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const title = navItems.find((n) => n.href === pathname)?.label ?? "Security";
+  const { ready, error, signOut, isEnabled } = useRequireSession(["guard"]);
+
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
+  }
+
+  if (error && isEnabled) {
+    return (
+      <div className="min-h-dvh bg-background p-6">
+        <div className="mx-auto max-w-lg space-y-4">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+          <Button onClick={() => void signOut()}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-background flex">
@@ -67,8 +90,7 @@ export function SecurityShell({ children }: { children: React.ReactNode }) {
             variant="outline"
             className="w-full"
             onClick={() => {
-              document.cookie = "estateos_role=; path=/; max-age=0";
-              window.location.href = "/login";
+              void signOut();
             }}
           >
             <LogOut className="h-4 w-4 mr-2" />

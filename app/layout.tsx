@@ -37,6 +37,7 @@ export default function RootLayout({
     <html lang="en" className="overflow-x-hidden">
       <body
         className={`${inter.variable} ${playfair.variable} min-w-0 antialiased overflow-x-hidden`}
+        suppressHydrationWarning
       >
         {children}
       </body>

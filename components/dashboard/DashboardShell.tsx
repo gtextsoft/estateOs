@@ -29,6 +29,8 @@ import {
   getLatestActiveEmergencyAlert,
   type EmergencyAlert,
 } from "@/components/dashboard/emergencyStore";
+import { fetchAdminNotifications, isApiMode, markAdminNotificationsRead } from "@/lib/estate-api";
+import { useRequireSession } from "@/lib/use-require-session";
 
 type NavItem = {
   icon: React.ElementType;
@@ -56,6 +58,7 @@ export function DashboardShell({
   children: React.ReactNode;
   roleLabel: string;
 }) {
+  const { ready, error, signOut, isEnabled, user: sessionUser } = useRequireSession(["manager"]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -69,20 +72,64 @@ export function DashboardShell({
   }, [pathname]);
 
   const user = useMemo(() => {
-    if (roleLabel === "Security Guard") return { name: "Jordan Davis", initials: "JD" };
-    if (roleLabel === "Resident") return { name: "Sarah Chen", initials: "SC" };
-    return { name: "James Doe", initials: "JD" };
-  }, [roleLabel]);
+    const fromEmail = (email?: string) => {
+      if (!email) return null;
+      const local = email.split("@")[0] ?? "";
+      return local
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(" ");
+    };
+    const displayName =
+      sessionUser?.name?.trim() || fromEmail(sessionUser?.email) || (roleLabel === "Security Guard" ? "Guard" : "Manager");
+    const initials = displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+    return { name: displayName, initials };
+  }, [roleLabel, sessionUser?.email, sessionUser?.name]);
 
   const [adminNotifications, setAdminNotifications] = useState<ResidentNotification[]>([]);
   const [priorityEmergency, setPriorityEmergency] = useState<EmergencyAlert | null>(null);
 
   useEffect(() => {
     const load = () => setAdminNotifications(loadNotifications());
-    load();
+    const loadApi = async () => {
+      try {
+        const rows = await fetchAdminNotifications();
+        const normalized: ResidentNotification[] = rows
+          .map((doc, idx) => {
+            const row = doc as {
+              _id?: string;
+              id?: string;
+              message?: string;
+              timeLabel?: string;
+              read?: boolean;
+              type?: ResidentNotification["type"];
+            };
+            return {
+              id: String(row.id ?? row._id ?? `admin-notif-${idx}`),
+              residentId: "admin",
+              message: String(row.message ?? ""),
+              timeLabel: String(row.timeLabel ?? "Just now"),
+              read: Boolean(row.read),
+              type: row.type ?? "notice",
+            };
+          })
+          .filter((n) => n.message);
+        setAdminNotifications(normalized);
+      } catch {
+        setAdminNotifications([]);
+      }
+    };
+    if (isApiMode()) void loadApi();
+    else load();
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "estateos_resident_notifications_v1") load();
+      if (!isApiMode() && e.key === "estateos_resident_notifications_v1") load();
       if (e.key === "estateos_emergency_alerts_v1") {
         setPriorityEmergency(getLatestActiveEmergencyAlert());
       }
@@ -93,14 +140,6 @@ export function DashboardShell({
   }, []);
 
   const unreadCount = useMemo(() => adminNotifications.filter((n) => !n.read).length, [adminNotifications]);
-
-  const adminNotifTitle = (n: ResidentNotification) => {
-    if (n.type === "arrival") return "Visitor arrived";
-    if (n.type === "service") return "Guest verified";
-    if (n.type === "payment") return "Payment update";
-    if (n.type === "emergency") return "Emergency alert";
-    return "Notice / Incident update";
-  };
 
   const allowedNav = useMemo(() => {
     if (roleLabel === "Security Guard") {
@@ -131,6 +170,36 @@ export function DashboardShell({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
+
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
+  }
+
+  if (error && isEnabled) {
+    return (
+      <div className="min-h-dvh bg-background p-6">
+        <div className="mx-auto max-w-lg space-y-4">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+          <Button onClick={() => void signOut()}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const adminNotifTitle = (n: ResidentNotification) => {
+    if (n.type === "arrival") return "Visitor arrived";
+    if (n.type === "service") return "Guest verified";
+    if (n.type === "payment") return "Payment update";
+    if (n.type === "emergency") return "Emergency alert";
+    return "Notice / Incident update";
+  };
+
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -184,8 +253,7 @@ export function DashboardShell({
             variant="ghost"
             className="w-full justify-start text-muted-foreground"
             onClick={() => {
-              document.cookie = "estateos_role=; path=/; max-age=0";
-              window.location.href = "/";
+              void signOut();
             }}
           >
             <LogOut className="h-4 w-4 mr-2" />
@@ -235,8 +303,17 @@ export function DashboardShell({
                     <Link
                       href="/dashboard/notifications"
                       className="text-xs font-medium text-primary hover:underline"
-                      onClick={() => {
+                      onClick={async () => {
                         // Mark notifications as read when the admin opens the full notifications page.
+                        if (isApiMode()) {
+                          try {
+                            await markAdminNotificationsRead();
+                            setAdminNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                          } catch {
+                            // ignore and continue navigation
+                          }
+                          return;
+                        }
                         const current = loadNotifications();
                         const next = current.map((n) => ({ ...n, read: true }));
                         saveNotifications(next);
@@ -299,8 +376,7 @@ export function DashboardShell({
                     <button
                       className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       onClick={() => {
-                        document.cookie = "estateos_role=; path=/; max-age=0";
-                        window.location.href = "/";
+                        void signOut();
                       }}
                     >
                       <LogOut className="h-4 w-4" />

@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         hostname: "randomuser.me",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "www.manubes.com",
+        pathname: "/**",
+      },
     ],
   },
 };

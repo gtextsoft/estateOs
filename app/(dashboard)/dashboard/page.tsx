@@ -1,32 +1,187 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, AlertTriangle, CreditCard, QrCode, Users } from "lucide-react";
+import { loadPasses } from "@/components/resident/store";
+import { loadIncidents, type IncidentRecord } from "@/components/dashboard/incidentsStore";
+import { loadPayments } from "@/components/dashboard/paymentsStore";
+import { loadResidents } from "@/components/dashboard/residentsStore";
+import {
+  fetchAdminIncidents,
+  fetchAdminPayments,
+  fetchAdminResidents,
+  fetchExpectedGuestPasses,
+  isApiMode,
+  meRequest,
+} from "@/lib/estate-api";
 
-const stats = [
-  { label: "Total Residents", value: "248", change: "+12", up: true, icon: Users, href: "/dashboard/residents" },
-  { label: "Visitors Today", value: "34", change: "+8", up: true, icon: QrCode, href: "/dashboard/visitors" },
-  { label: "Open Incidents", value: "3", change: "-2", up: false, icon: AlertTriangle, href: "/dashboard/incidents" },
-  { label: "Pending Payments", value: "₦1.2M", change: "+15%", up: true, icon: CreditCard, href: "/dashboard/payments" },
-] as const;
+type VisitorRow = { id: string; name: string; host: string; time: string; status: string };
 
-const recentVisitors = [
-  { id: "GPA-001", name: "Kelechi Nwosu", host: "Unit A-01 - Adaeze Okafor", time: "2 min ago", status: "Entered" },
-  { id: "GPA-002", name: "MainFix Plumber", host: "Unit A-01 - Adaeze Okafor", time: "15 min ago", status: "Entered" },
-  { id: "GPA-003", name: "Tunde (Family)", host: "Unit A-01 - Adaeze Okafor", time: "32 min ago", status: "Exited" },
-  { id: "GPA-004", name: "Delivery - DHL", host: "Unit A-01 - Adaeze Okafor", time: "1 hr ago", status: "Exited" },
-] as const;
+const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
+const numberFmt = new Intl.NumberFormat();
 
-const recentIncidents = [
-  { id: "inc_unauth_parking", title: "Unauthorized parking", location: "Block B Lot", severity: "Low", time: "1 hr ago" },
-  { id: "inc_noise_9d", title: "Noise complaint", location: "Unit 9D", severity: "Medium", time: "3 hrs ago" },
-  { id: "inc_gate_malfunction", title: "Gate malfunction", location: "North Gate", severity: "High", time: "5 hrs ago" },
-] as const;
+function initialsName(full?: string, email?: string) {
+  if (full?.trim()) return full.trim();
+  if (!email) return "Manager";
+  const local = email.split("@")[0] ?? "";
+  return (
+    local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ") || "Manager"
+  );
+}
+
+function relativeTime(ts: number) {
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+function parseAmount(v: string) {
+  const n = Number(String(v).replace(/[^0-9.-]+/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
 
 export default function DashboardPage() {
+  const [managerName, setManagerName] = useState("Manager");
+  const [estateName, setEstateName] = useState("your estate");
+  const [residentsCount, setResidentsCount] = useState(0);
+  const [visitorsCount, setVisitorsCount] = useState(0);
+  const [openIncidentsCount, setOpenIncidentsCount] = useState(0);
+  const [pendingPaymentsTotal, setPendingPaymentsTotal] = useState(0);
+  const [recentVisitors, setRecentVisitors] = useState<VisitorRow[]>([]);
+  const [recentIncidents, setRecentIncidents] = useState<IncidentRecord[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (isApiMode()) {
+          const today = new Date().toISOString().slice(0, 10);
+          const [me, residents, visitors, incidents, payments] = await Promise.all([
+            meRequest(),
+            fetchAdminResidents(),
+            fetchExpectedGuestPasses(today),
+            fetchAdminIncidents(),
+            fetchAdminPayments(),
+          ]);
+          setManagerName(initialsName((me.user as { name?: string }).name, me.user.email));
+          setEstateName(me.user.estate?.name || "your estate");
+          setResidentsCount(residents.length);
+          setVisitorsCount(visitors.length);
+          setOpenIncidentsCount(incidents.filter((i) => i.status !== "Resolved").length);
+          setPendingPaymentsTotal(
+            payments.filter((p) => p.status !== "Paid").reduce((sum, p) => sum + parseAmount(p.amount), 0),
+          );
+          setRecentVisitors(
+            visitors.slice(0, 4).map((v) => ({
+              id: v.id,
+              name: v.guestName,
+              host: `${v.residentUnit ? `Unit ${v.residentUnit} - ` : ""}${v.residentName ?? "Resident"}`,
+              time: relativeTime(v.createdAt),
+              status: v.status[0].toUpperCase() + v.status.slice(1),
+            })),
+          );
+          setRecentIncidents(
+            incidents
+              .filter((i) => i.status !== "Resolved")
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, 3),
+          );
+          return;
+        }
+
+        const residents = loadResidents();
+        const visitors = loadPasses();
+        const incidents = loadIncidents();
+        const payments = loadPayments();
+        setResidentsCount(residents.length);
+        setVisitorsCount(
+          visitors.filter((v) => (v.date ? v.date === new Date().toISOString().slice(0, 10) : true)).length,
+        );
+        setOpenIncidentsCount(incidents.filter((i) => i.status !== "Resolved").length);
+        setPendingPaymentsTotal(
+          payments.filter((p) => p.status !== "Paid").reduce((sum, p) => sum + parseAmount(p.amount), 0),
+        );
+        const residentById = new Map(residents.map((r) => [r.id, r]));
+        setRecentVisitors(
+          visitors
+            .slice()
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 4)
+            .map((v) => {
+              const host = residentById.get(v.residentId);
+              return {
+                id: v.id,
+                name: v.guestName,
+                host: host ? `Unit ${host.unit} - ${host.name}` : "Resident",
+                time: relativeTime(v.createdAt),
+                status: v.status[0].toUpperCase() + v.status.slice(1),
+              };
+            }),
+        );
+        setRecentIncidents(
+          incidents
+            .filter((i) => i.status !== "Resolved")
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 3),
+        );
+      } catch {
+        // Keep defaults if fetch fails.
+      }
+    })();
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Total Residents",
+        value: numberFmt.format(residentsCount),
+        change: residentsCount > 0 ? "Live" : "0",
+        up: residentsCount > 0,
+        icon: Users,
+        href: "/dashboard/residents",
+      },
+      {
+        label: "Visitors Today",
+        value: numberFmt.format(visitorsCount),
+        change: visitorsCount > 0 ? "Live" : "0",
+        up: visitorsCount > 0,
+        icon: QrCode,
+        href: "/dashboard/visitors",
+      },
+      {
+        label: "Open Incidents",
+        value: numberFmt.format(openIncidentsCount),
+        change: openIncidentsCount > 0 ? "Attention" : "Clear",
+        up: openIncidentsCount === 0,
+        icon: AlertTriangle,
+        href: "/dashboard/incidents",
+      },
+      {
+        label: "Pending Payments",
+        value: money.format(pendingPaymentsTotal || 0),
+        change: pendingPaymentsTotal > 0 ? "Outstanding" : "Clear",
+        up: pendingPaymentsTotal === 0,
+        icon: CreditCard,
+        href: "/dashboard/payments",
+      },
+    ],
+    [openIncidentsCount, pendingPaymentsTotal, residentsCount, visitorsCount],
+  );
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Good morning, James</h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening at Prestige Palms today.</p>
+        <h1 className="font-display text-2xl font-bold text-foreground">Good morning, {managerName}</h1>
+        <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening at {estateName} today.</p>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -64,7 +219,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {recentVisitors.map((v, i) => (
+            {recentVisitors.map((v) => (
               <Link
                 key={v.id}
                 href={`/dashboard/visitors/${v.id}`}
@@ -76,9 +231,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-right">
                   <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      v.status === "Entered" ? "bg-emerald-100 text-emerald-700" : "bg-secondary text-muted-foreground"
-                    }`}
+                    className="text-xs font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground"
                   >
                     {v.status}
                   </span>
@@ -97,7 +250,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {recentIncidents.map((inc, i) => (
+            {recentIncidents.map((inc) => (
               <Link
                 key={inc.id}
                 href={`/dashboard/incidents/${inc.id}`}
@@ -105,7 +258,7 @@ export default function DashboardPage() {
               >
                 <div>
                   <p className="text-sm font-medium text-foreground">{inc.title}</p>
-                  <p className="text-xs text-muted-foreground">{inc.location}</p>
+                  <p className="text-xs text-muted-foreground">{inc.reporter}</p>
                 </div>
                 <div className="text-right">
                   <span
@@ -119,7 +272,7 @@ export default function DashboardPage() {
                   >
                     {inc.severity}
                   </span>
-                  <p className="text-xs text-muted-foreground mt-1">{inc.time}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{relativeTime(inc.createdAt)}</p>
                 </div>
               </Link>
             ))}

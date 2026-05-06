@@ -8,6 +8,12 @@ const USER_ID_KEY = "estateos_user_id";
 const ROLE_KEY = "estateos_role_client";
 const RESIDENT_ID_KEY = "estateos_resident_mongo_id";
 
+/**
+ * Session strategy choice (Phase B): Cookie-first SPA.
+ * The API cookie (`estateos_token`) is authoritative and sent with `credentials: include`.
+ * This local token cache remains for current client-side routing compatibility.
+ */
+
 export function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 }

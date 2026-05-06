@@ -16,6 +16,13 @@ import type { EmergencyAlert } from "@/components/dashboard/emergencyStore";
 import { clearSession, getApiBase, getStoredToken } from "./session";
 
 type Json = Record<string, unknown>;
+type ApiErrorCode =
+  | "KYC_PENDING"
+  | "KYC_REJECTED"
+  | "KYC_REQUIRED"
+  | "ESTATE_PENDING"
+  | "ESTATE_SUSPENDED"
+  | "ESTATE_NOT_ACTIVE";
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const base = getApiBase();
@@ -37,6 +44,20 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   ) {
     clearSession();
     window.location.href = "/login";
+  }
+  if (res.status === 403 && typeof window !== "undefined") {
+    try {
+      const text = await res.clone().text();
+      const parsed = text ? (JSON.parse(text) as { code?: ApiErrorCode }) : {};
+      if (parsed.code === "KYC_PENDING" || parsed.code === "KYC_REJECTED" || parsed.code === "KYC_REQUIRED") {
+        if (window.location.pathname !== "/pending-kyc") window.location.href = "/pending-kyc";
+      }
+      if (parsed.code === "ESTATE_PENDING" || parsed.code === "ESTATE_SUSPENDED" || parsed.code === "ESTATE_NOT_ACTIVE") {
+        if (window.location.pathname !== "/pending-estate") window.location.href = "/pending-estate";
+      }
+    } catch {
+      // ignore malformed payloads
+    }
   }
 
   return res;
@@ -282,6 +303,7 @@ export async function registerEstateRequest(body: {
   email: string;
   password: string;
   managerName?: string;
+  verificationToken: string;
 }) {
   const res = await apiFetch("/auth/register-estate", { method: "POST", body: JSON.stringify(body) });
   return readJson<{
@@ -305,6 +327,7 @@ export async function signupRequest(body: {
   block?: string;
   phone?: string;
   kyc?: { fullName?: string; phone?: string; nationalIdOrPassport?: string; notes?: string };
+  verificationToken: string;
 }) {
   const res = await apiFetch("/auth/signup", { method: "POST", body: JSON.stringify(body) });
   return readJson<{
@@ -316,6 +339,28 @@ export async function signupRequest(body: {
     estateId: string;
     kycStatus?: string;
   }>(res);
+}
+
+export async function requestVerificationCode(body: {
+  email: string;
+  intent: "signup" | "register-estate";
+}) {
+  const res = await apiFetch("/auth/verification/request", { method: "POST", body: JSON.stringify(body) });
+  return readJson<{
+    ok: boolean;
+    expiresInSeconds: number;
+    devCode?: string;
+    emailDelivery?: "sent" | "skipped";
+  }>(res);
+}
+
+export async function confirmVerificationCode(body: {
+  email: string;
+  intent: "signup" | "register-estate";
+  code: string;
+}) {
+  const res = await apiFetch("/auth/verification/confirm", { method: "POST", body: JSON.stringify(body) });
+  return readJson<{ ok: boolean; verificationToken: string }>(res);
 }
 
 export async function resolveEstateSlug(slug: string) {
@@ -396,6 +441,13 @@ export async function patchPlatformEstate(
     body: JSON.stringify(input),
   });
   return readJson(res);
+}
+
+export async function deletePlatformEstate(estateId: string) {
+  const res = await apiFetch(`/platform/estates/${encodeURIComponent(estateId)}`, {
+    method: "DELETE",
+  });
+  return readJson<{ ok: boolean; deleted: { estateId: string; slug: string } }>(res);
 }
 
 /** Approve or reject a pending estate registration. */
