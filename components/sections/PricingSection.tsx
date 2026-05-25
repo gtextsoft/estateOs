@@ -51,8 +51,8 @@ const plans: Array<{
     features: [
       "Up to 200 units",
       "Everything in Starter",
-      "Payments & billing",
-      "Analytics & reports",
+      "Payment tracking & billing requests",
+      "Operational reports (visitor & security metrics)",
       "WhatsApp integration",
       "Priority support",
     ],

@@ -31,6 +31,7 @@ import { acknowledgeEmergencyAlert, loadEmergencyAlerts, type EmergencyAlert } f
 import {
   ackSecurityEmergencyAlert,
   fetchAdminResidents,
+  createSecurityGate,
   fetchSecurityEmergencyAlerts,
   fetchSecurityEvents,
   fetchSecurityGates,
@@ -254,16 +255,36 @@ export default function SecurityPage() {
                 const name = createGateName.trim();
                 if (!name) return;
                 setCreatingGate(true);
-                try {
-                  const g = createGate({ name, status: createGateStatus });
-                  setCreateGateName("");
-                  setCreateGateStatus("Active");
-                  setGateId(g.id);
-                  saveGatePreset(g.id);
-                  refresh();
-                } finally {
-                  setCreatingGate(false);
-                }
+                void (async () => {
+                  try {
+                    if (isApiMode()) {
+                      const baseId = name
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "-")
+                        .replace(/^-|-$/g, "")
+                        .slice(0, 32) || "gate";
+                      const g = await createSecurityGate({
+                        name,
+                        idKey: baseId,
+                        status: createGateStatus,
+                      });
+                      setCreateGateName("");
+                      setCreateGateStatus("Active");
+                      setGateId(g.id as SecurityGateId);
+                      saveGatePreset(g.id as SecurityGateId);
+                      refresh();
+                      return;
+                    }
+                    const g = createGate({ name, status: createGateStatus });
+                    setCreateGateName("");
+                    setCreateGateStatus("Active");
+                    setGateId(g.id);
+                    saveGatePreset(g.id);
+                    refresh();
+                  } finally {
+                    setCreatingGate(false);
+                  }
+                })();
               }}
             >
               <Plus className="h-4 w-4 mr-2" /> Create

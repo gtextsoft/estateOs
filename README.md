@@ -19,7 +19,9 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 # NEXT_PUBLIC_DEMO_RESIDENT_CODE=RES-A01
 ```
 
-If `NEXT_PUBLIC_API_URL` is unset, the app falls back to local demo data in `localStorage` where implemented.
+**Production:** set `NEXT_PUBLIC_REQUIRE_API=true` (or use a production build) so dashboards require API login. Cookie-based auth (`estateos_token` + CSRF) is used when the API URL is set.
+
+**Local demo:** without `NEXT_PUBLIC_API_URL`, some pages still use `localStorage` demo data, but **login requires the API** — start the backend first.
 
 ## Scripts
 

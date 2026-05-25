@@ -10,6 +10,9 @@ import {
   type SignUpFormProps,
   type Testimonial,
 } from "@/components/ui/sign-in";
+import { Modal } from "@/components/ui/modal";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   confirmVerificationCode,
   loginEmailRequest,
@@ -17,6 +20,8 @@ import {
   requestVerificationCode,
   resolveEstateSlug,
   signupRequest,
+  requestPasswordReset,
+  confirmPasswordReset,
 } from "@/lib/estate-api";
 import { isApiMode, setSession } from "@/lib/session";
 
@@ -100,6 +105,11 @@ export function AuthClient() {
   const [verificationBusy, setVerificationBusy] = useState(false);
   const [verificationInlineCode, setVerificationInlineCode] = useState<string | null>(null);
   const legacyAuthEnabled = process.env.NEXT_PUBLIC_ALLOW_LEGACY_AUTH === "true";
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetDevCode, setResetDevCode] = useState<string | null>(null);
 
   const emailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -115,7 +125,6 @@ export function AuthClient() {
       const pw = String(fd.get("password") ?? password);
       const res = await loginEmailRequest({ email: em, password: pw });
       setSession({
-        token: res.token,
         userId: res.userId,
         role: res.role,
         residentId: res.residentId,
@@ -152,7 +161,6 @@ export function AuthClient() {
         residentCode: residentCode.trim(),
       });
       setSession({
-        token: res.token,
         userId: res.userId,
         role: res.role,
         residentId: res.userId,
@@ -208,7 +216,6 @@ export function AuthClient() {
         verificationToken,
       });
       setSession({
-        token: res.token,
         userId: res.userId,
         role: res.role,
         residentId: res.residentId,
@@ -279,7 +286,16 @@ export function AuthClient() {
       window.alert("Google sign-in is not configured yet.");
     },
     onResetPassword: () => {
-      window.alert("Contact your estate manager or use the support page for account recovery.");
+      if (!isApiMode()) {
+        setError("Set NEXT_PUBLIC_API_URL to use password reset.");
+        return;
+      }
+      setResetOpen(true);
+      setResetEmail(email);
+      setResetCode("");
+      setResetPassword("");
+      setResetDevCode(null);
+      setError(null);
     },
     onCreateAccount: () => setMode("signup"),
     error: mode === "signin" ? error : null,
@@ -424,6 +440,78 @@ export function AuthClient() {
           signUpProps={signUpProps}
         />
       </div>
+      <Modal isOpen={resetOpen} onClose={() => setResetOpen(false)} title="Reset password">
+        <div className="space-y-3">
+          <Input
+            type="email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            placeholder="Account email"
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={loading || !resetEmail.trim()}
+              onClick={() => {
+                void (async () => {
+                  setError(null);
+                  setLoading(true);
+                  try {
+                    const r = await requestPasswordReset(resetEmail.trim());
+                    setResetDevCode(r.devCode ?? null);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Could not send reset code");
+                  } finally {
+                    setLoading(false);
+                  }
+                })();
+              }}
+            >
+              Send code
+            </Button>
+          </div>
+          {resetDevCode && (
+            <p className="text-xs text-muted-foreground font-mono">Dev code: {resetDevCode}</p>
+          )}
+          <Input
+            value={resetCode}
+            onChange={(e) => setResetCode(e.target.value)}
+            placeholder="6-digit code"
+          />
+          <Input
+            type="password"
+            value={resetPassword}
+            onChange={(e) => setResetPassword(e.target.value)}
+            placeholder="New password (min 8 characters)"
+          />
+          <Button
+            className="w-full bg-gradient-gold shadow-gold hover:opacity-90"
+            disabled={loading || !resetEmail || !resetCode || resetPassword.length < 8}
+            onClick={() => {
+              void (async () => {
+                setError(null);
+                setLoading(true);
+                try {
+                  await confirmPasswordReset({
+                    email: resetEmail.trim(),
+                    code: resetCode.trim(),
+                    password: resetPassword,
+                  });
+                  setResetOpen(false);
+                  setError(null);
+                  alert("Password updated. Sign in with your new password.");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Reset failed");
+                } finally {
+                  setLoading(false);
+                }
+              })();
+            }}
+          >
+            Update password
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

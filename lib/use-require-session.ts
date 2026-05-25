@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { logoutRequest, meRequest } from "@/lib/estate-api";
-import { clearSession, getStoredToken, isApiMode, setSession } from "@/lib/session";
+import { clearSession, isApiMode, requireApiInProduction, setSession } from "@/lib/session";
 
 type SessionRole = "resident" | "guard" | "manager" | "platform_admin";
 type SessionUser = {
@@ -27,15 +27,14 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
 
   useEffect(() => {
     if (!isEnabled) {
+      if (requireApiInProduction()) {
+        router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+        return;
+      }
       setReady(true);
       return;
     }
     void (async () => {
-      const token = getStoredToken();
-      if (!token) {
-        router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
-        return;
-      }
       try {
         const session = await meRequest();
         const role = session.user.role as SessionRole;
@@ -45,13 +44,14 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
           return;
         }
         setSession({
-          token,
           userId: session.user.userId ?? session.user.id,
           role,
+          residentId: session.user.role === "resident" ? session.user.id : undefined,
         });
         setUser(session.user as SessionUser);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Session check failed");
+      } catch {
+        router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+        return;
       } finally {
         setReady(true);
       }

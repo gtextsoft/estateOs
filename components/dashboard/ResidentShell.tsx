@@ -71,28 +71,8 @@ export function ResidentShell({
     return () => window.removeEventListener("hashchange", readHash);
   }, []);
 
-  if (!ready) {
-    return (
-      <div className="min-h-dvh bg-background flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Checking session…</p>
-      </div>
-    );
-  }
-
-  if (error && isEnabled) {
-    return (
-      <div className="min-h-dvh bg-background p-6">
-        <div className="mx-auto max-w-lg space-y-4">
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-          <Button onClick={() => void signOut()}>Sign out</Button>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
+    if (!ready || (error && isEnabled)) return;
     const load = async () => {
       if (isApiMode()) {
         try {
@@ -120,7 +100,7 @@ export function ResidentShell({
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [ready, error, isEnabled]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -190,6 +170,27 @@ export function ResidentShell({
     if (!item.hash) return !hash;
     return hash === item.hash;
   };
+
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
+  }
+
+  if (error && isEnabled) {
+    return (
+      <div className="min-h-dvh bg-background p-6">
+        <div className="mx-auto max-w-lg space-y-4">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+          <Button onClick={() => void signOut()}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-background flex">

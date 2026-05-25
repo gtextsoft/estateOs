@@ -39,7 +39,14 @@ export default function SecurityEmergenciesPage() {
       if (e.key === "estateos_emergency_alerts_v1") sync();
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const poll =
+      isApiMode()
+        ? window.setInterval(() => sync(), 15000)
+        : undefined;
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      if (poll) window.clearInterval(poll);
+    };
   }, []);
 
   const activeCount = useMemo(() => alerts.filter((a) => a.status === "active").length, [alerts]);

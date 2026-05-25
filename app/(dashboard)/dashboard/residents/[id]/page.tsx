@@ -19,6 +19,8 @@ import type { IncidentRecord } from "@/components/dashboard/incidentsStore";
 import { loadIncidents } from "@/components/dashboard/incidentsStore";
 import type { PaymentRecord } from "@/components/dashboard/paymentsStore";
 import { loadPayments } from "@/components/dashboard/paymentsStore";
+import { fetchAdminResidentHub } from "@/lib/estate-api";
+import { isApiMode } from "@/lib/session";
 
 export default function ResidentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -39,10 +41,43 @@ export default function ResidentDetailPage() {
   const [passesPage, setPassesPage] = useState(1);
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [incidentsPage, setIncidentsPage] = useState(1);
+  const [loading, setLoading] = useState(isApiMode());
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setResidents(loadResidents());
+    const load = async () => {
+      if (isApiMode()) {
+        setLoading(true);
+        setLoadError(null);
+        try {
+          const hub = await fetchAdminResidentHub(id);
+          if (!hub.resident) {
+            setResidents([]);
+            setPasses([]);
+            setIncidents([]);
+            setPayments([]);
+            return;
+          }
+          setResidents([hub.resident]);
+          setPasses(hub.passes);
+          setIncidents(hub.incidents);
+          setPayments(hub.payments);
+        } catch (e) {
+          setLoadError(e instanceof Error ? e.message : "Failed to load resident");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+      setResidents(loadResidents());
+      setPasses(loadPasses());
+      setIncidents(loadIncidents());
+      setPayments(loadPayments());
+      setLoading(false);
+    };
+    void load();
     const onStorage = (e: StorageEvent) => {
+      if (isApiMode()) return;
       if (e.key === "estateos_residents_v1") setResidents(loadResidents());
       if (e.key === "estateos_resident_passes_v1") setPasses(loadPasses());
       if (e.key === "estateos_incidents_v1") setIncidents(loadIncidents());
@@ -50,16 +85,10 @@ export default function ResidentDetailPage() {
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [id]);
 
   const r = useMemo(() => residents.find((x) => x.id === id), [residents, id]);
   const rId = r?.id ?? "";
-
-  useEffect(() => {
-    setPasses(loadPasses());
-    setIncidents(loadIncidents());
-    setPayments(loadPayments());
-  }, []);
 
   const residentPasses = useMemo(
     () => passes.filter((p) => p.residentId === rId),
@@ -98,6 +127,10 @@ export default function ResidentDetailPage() {
     return residentIncidents.slice(start, start + pageSize);
   }, [residentIncidents, incidentsSafePage]);
 
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading resident…</p>;
+  }
+
   if (!r) {
     return (
       <div className="space-y-2">
@@ -107,6 +140,7 @@ export default function ResidentDetailPage() {
         <p className="text-sm text-muted-foreground">
           This resident does not exist.
         </p>
+        {loadError && <p className="text-sm text-destructive">{loadError}</p>}
         <Link
           href="/dashboard/residents"
           className="text-sm font-medium text-primary hover:underline"

@@ -18,6 +18,7 @@ export default function ResidentEmergencyPage() {
   const [message, setMessage] = useState("");
   const [myAlerts, setMyAlerts] = useState<EmergencyAlert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<EmergencyAlert | null>(null);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = async () => {
@@ -49,6 +50,7 @@ export default function ResidentEmergencyPage() {
 
     if (isApiMode()) {
       void (async () => {
+        setEmergencyError(null);
         try {
           await createEmergencyRequest(detail);
           const all = await fetchSecurityEmergencyAlerts();
@@ -56,8 +58,10 @@ export default function ResidentEmergencyPage() {
           setMyAlerts(all.filter((a) => a.residentId === rid).sort((a, b) => b.createdAt - a.createdAt));
           setPanicSent(true);
           setTimeout(() => setPanicSent(false), 2500);
-        } catch {
-          /* ignore */
+        } catch (e) {
+          setEmergencyError(
+            e instanceof Error ? e.message : "Failed to send emergency alert. Try again or call the estate hotline.",
+          );
         }
       })();
       return;
@@ -105,6 +109,14 @@ export default function ResidentEmergencyPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {emergencyError && (
+        <div
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
+          {emergencyError}
+        </div>
+      )}
       <div className="bg-card rounded-xl border border-border shadow-soft p-6 text-center">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
           Emergency
@@ -124,7 +136,9 @@ export default function ResidentEmergencyPage() {
           <div>
             <CheckCircle className="h-10 w-10 text-emerald-600 mx-auto mb-3" />
             <div className="text-sm font-semibold text-emerald-700">Alert Sent!</div>
-            <div className="text-xs text-muted-foreground mt-1">Guard post notified (demo).</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {isApiMode() ? "Security team has been notified." : "Guard post notified (demo)."}
+            </div>
           </div>
         ) : (
           <>

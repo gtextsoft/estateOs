@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 
 import { logoutRequest, meRequest } from "@/lib/estate-api";
-import { clearSession, getStoredToken, isApiMode, setSession } from "@/lib/session";
+import { clearSession, isApiMode, setSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { PlatformLandingBackground } from "@/components/ui/background-snippets";
 
@@ -37,11 +37,6 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
       setReady(true);
       return;
     }
-    const token = getStoredToken();
-    if (!token) {
-      router.replace("/login?next=/platform");
-      return;
-    }
     try {
       const m = await meRequest();
       const u = m.user as { id: string; role: string; userId?: string; email?: string };
@@ -53,7 +48,6 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
         return;
       }
       setSession({
-        token,
         userId: u.userId ?? u.id,
         role: u.role,
       });

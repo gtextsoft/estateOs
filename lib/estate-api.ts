@@ -13,7 +13,16 @@ import type {
 } from "@/components/dashboard/securityStore";
 import type { EmergencyAlert } from "@/components/dashboard/emergencyStore";
 
-import { clearSession, getApiBase, getStoredToken } from "./session";
+import { clearSession, getApiBase } from "./session";
+
+const CSRF_COOKIE = "estateos_csrf";
+const CSRF_HEADER = "X-CSRF-Token";
+
+function getCsrfTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${CSRF_COOKIE}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 type Json = Record<string, unknown>;
 type ApiErrorCode =
@@ -32,8 +41,11 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const token = getStoredToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const method = (init.method ?? "GET").toUpperCase();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const csrf = getCsrfTokenFromCookie();
+    if (csrf) headers.set(CSRF_HEADER, csrf);
+  }
 
   const res = await fetch(`${base}/api${path}`, { ...init, credentials: "include", headers });
 
@@ -561,6 +573,36 @@ export async function fetchAdminResidents() {
   return data.residents.map(mapResidentDoc);
 }
 
+/** Load one resident plus related passes, incidents, and payments (API mode detail pages). */
+export async function fetchAdminResidentHub(residentId: string) {
+  const [residents, passes, incidents, payments] = await Promise.all([
+    fetchAdminResidents(),
+    fetchAdminGuestPassesAll(),
+    fetchAdminIncidents(),
+    fetchAdminPayments(),
+  ]);
+  const resident = residents.find((r) => r.id === residentId) ?? null;
+  return {
+    resident,
+    passes: passes.filter((p) => p.residentId === residentId),
+    incidents: incidents.filter((i) => i.residentId === residentId),
+    payments: payments.filter((p) => p.residentId === residentId),
+  };
+}
+
+export async function fetchAdminGuestPassById(passId: string) {
+  const passes = await fetchAdminGuestPassesAll();
+  const pass = passes.find((p) => p.id === passId) ?? null;
+  if (!pass) return { pass: null, residentName: "", residentUnit: "" };
+  const residents = await fetchAdminResidents();
+  const host = residents.find((r) => r.id === pass.residentId);
+  return {
+    pass,
+    residentName: host?.name ?? "—",
+    residentUnit: host?.unit ?? "—",
+  };
+}
+
 export async function createAdminResident(input: {
   name: string;
   unit: string;
@@ -788,6 +830,31 @@ export async function fetchSecurityGates() {
   const res = await apiFetch("/security/gates");
   const data = await readJson<{ ok: boolean; gates: Json[] }>(res);
   return data.gates.map(mapGateDoc);
+}
+
+export async function createSecurityGate(input: { name: string; idKey: string; status?: string }) {
+  const res = await apiFetch("/security/gates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  const data = await readJson<{ ok: boolean; gate: Json }>(res);
+  return mapGateDoc(data.gate);
+}
+
+export async function requestPasswordReset(email: string) {
+  const res = await apiFetch("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  return readJson<{ ok: boolean; devCode?: string; expiresInSeconds?: number }>(res);
+}
+
+export async function confirmPasswordReset(body: { email: string; code: string; password: string }) {
+  const res = await apiFetch("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return readJson<{ ok: boolean }>(res);
 }
 
 export async function fetchSecurityEvents(query?: { gateId?: string; q?: string; limit?: number }) {
