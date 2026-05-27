@@ -6,10 +6,18 @@ import { Copy, Loader2, MoreHorizontal, Plus, QrCode, Search, UserPlus } from "l
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createResidentId, loadResidents, saveResidents, type ResidentRecord } from "@/components/dashboard/residentsStore";
-import { createAdminResident, fetchAdminResidents } from "@/lib/estate-api";
+import {
+  createAdminResident,
+  deleteAdminResident,
+  fetchAdminResidents,
+  patchAdminResident,
+  resendAdminResidentOnboarding,
+} from "@/lib/estate-api";
 import { isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 import { revokePassesForResident } from "@/components/resident/store";
 import { Modal } from "@/components/ui/modal";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { Pagination } from "@/components/ui/pagination";
 import { QrCodeDisplay } from "@/components/ui/QrCodeDisplay";
 
@@ -37,6 +45,14 @@ export default function ResidentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewResidentId, setPreviewResidentId] = useState<string>("");
+  const [createdTempPassword, setCreatedTempPassword] = useState<string>("");
+  const [copiedTempPassword, setCopiedTempPassword] = useState(false);
+  const [resendingOnboarding, setResendingOnboarding] = useState(false);
+  const [deletingResident, setDeletingResident] = useState(false);
+  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
+  const [pendingDeleteResident, setPendingDeleteResident] = useState<ResidentRecord | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   const canSave = useMemo(() => {
     return name.trim().length >= 2 && email.trim().includes("@") && unit.trim().length >= 2;
@@ -61,7 +77,7 @@ export default function ResidentsPage() {
     setSaving(true);
     try {
       if (isApiMode()) {
-        const record = await createAdminResident({
+        const out = await createAdminResident({
           name: name.trim(),
           email: email.trim().toLowerCase(),
           unit: unit.trim().toUpperCase(),
@@ -69,6 +85,7 @@ export default function ResidentsPage() {
           building: building.trim() || undefined,
           block: block.trim() || undefined,
         });
+        const record = out.resident;
         setResidents((prev) => [record, ...prev.filter((r) => r.id !== record.id)]);
         setPage(1);
         setSelected(null);
@@ -81,6 +98,8 @@ export default function ResidentsPage() {
         setBuilding("");
         setBlock("");
         setPreviewResidentId("");
+        setCreatedTempPassword(record.auth?.temporaryPassword ?? "");
+        enqueueNotice("Success", out.message);
         return;
       }
       await new Promise((r) => setTimeout(r, 650));
@@ -111,6 +130,7 @@ export default function ResidentsPage() {
       setBuilding("");
       setBlock("");
       setPreviewResidentId("");
+      setCreatedTempPassword("");
     } catch {
       setError("Could not save. Please try again.");
     } finally {
@@ -175,26 +195,58 @@ export default function ResidentsPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, safePage]);
 
-  const deactivate = (id: string) => {
-    const next = residents.map((r) => (r.id === id ? { ...r, status: "Inactive" as const } : r));
-    setResidents(next);
-    saveResidents(next);
-    revokePassesForResident(id);
-    setSelected((cur) => (cur && cur.id === id ? { ...cur, status: "Inactive" as const } : cur));
+  const updateResidentStatus = async (id: string, status: "Active" | "Inactive") => {
+    setError(null);
+    setStatusSavingId(id);
+    try {
+      if (isApiMode()) {
+        const out = await patchAdminResident(id, { status });
+        const updated = out.resident;
+        setResidents((prev) => prev.map((r) => (r.id === id ? { ...r, status: updated.status } : r)));
+        setSelected((cur) => (cur && cur.id === id ? { ...cur, status: updated.status } : cur));
+        enqueueNotice("Success", out.message);
+      } else {
+        const next = residents.map((r) => (r.id === id ? { ...r, status } : r));
+        setResidents(next);
+        saveResidents(next);
+        setSelected((cur) => (cur && cur.id === id ? { ...cur, status } : cur));
+      }
+      if (status === "Inactive") {
+        revokePassesForResident(id);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update resident status";
+      setError(msg);
+      enqueueNotice("Update failed", msg);
+    } finally {
+      setStatusSavingId(null);
+    }
   };
 
-  const approve = (id: string) => {
-    const next = residents.map((r) => (r.id === id ? { ...r, status: "Active" as const } : r));
-    setResidents(next);
-    saveResidents(next);
-    setSelected((cur) => (cur && cur.id === id ? { ...cur, status: "Active" as const } : cur));
-  };
-
-  const reactivate = (id: string) => {
-    const next = residents.map((r) => (r.id === id ? { ...r, status: "Active" as const } : r));
-    setResidents(next);
-    saveResidents(next);
-    setSelected((cur) => (cur && cur.id === id ? { ...cur, status: "Active" as const } : cur));
+  const deleteResidentAction = async (resident: ResidentRecord) => {
+    setDeleteError(null);
+    setDeletingResident(true);
+    try {
+      if (isApiMode()) {
+        const out = await deleteAdminResident(resident.id);
+        enqueueNotice("Success", out.message ?? "Resident deleted successfully.");
+      }
+      const next = residents.filter((r) => r.id !== resident.id);
+      setResidents(next);
+      saveResidents(next);
+      revokePassesForResident(resident.id);
+      setSelected((cur) => (cur?.id === resident.id ? null : cur));
+      setMenuFor((cur) => (cur === resident.id ? null : cur));
+      setPendingDeleteResident(null);
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to delete resident";
+      setError(msg);
+      setDeleteError(msg);
+      return false;
+    } finally {
+      setDeletingResident(false);
+    }
   };
 
   return (
@@ -218,6 +270,7 @@ export default function ResidentsPage() {
             setPhone("");
             setBuilding("");
             setBlock("");
+            setCreatedTempPassword("");
           }}
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -308,7 +361,7 @@ export default function ResidentsPage() {
                             className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
                             onClick={() => {
                               setMenuFor(null);
-                              approve(r.id);
+                              void updateResidentStatus(r.id, "Active");
                             }}
                           >
                             Approve
@@ -331,13 +384,24 @@ export default function ResidentsPage() {
                         <button
                           type="button"
                           className="w-full cursor-pointer text-left px-3 py-2 text-sm hover:bg-muted transition-colors text-destructive disabled:opacity-50"
-                          disabled={r.status === "Inactive"}
+                          disabled={r.status === "Inactive" || statusSavingId === r.id}
                           onClick={() => {
                             setMenuFor(null);
-                            deactivate(r.id);
+                            void updateResidentStatus(r.id, "Inactive");
                           }}
                         >
-                          Deactivate
+                          {statusSavingId === r.id ? "Updating..." : "Deactivate"}
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full cursor-pointer text-left px-3 py-2 text-sm hover:bg-muted transition-colors text-destructive disabled:opacity-50"
+                          disabled={deletingResident}
+                          onClick={() => {
+                            setPendingDeleteResident(r);
+                            setMenuFor(null);
+                          }}
+                        >
+                          Delete resident
                         </button>
                       </div>
                     )}
@@ -489,6 +553,119 @@ export default function ResidentsPage() {
                 </div>
               </div>
 
+              {selected.auth?.temporaryPassword && (
+                <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Default login password
+                  </p>
+                  <p className="mt-2 font-mono text-sm text-foreground break-all">{selected.auth.temporaryPassword}</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(selected.auth?.temporaryPassword || "");
+                          setCopiedTempPassword(true);
+                          window.setTimeout(() => setCopiedTempPassword(false), 1200);
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy password
+                    </Button>
+                    {selected.auth.mustResetPassword ? (
+                      <span className="text-xs text-amber-800">User must reset password on first login.</span>
+                    ) : (
+                      <span className="text-xs text-emerald-700">Password reset completed.</span>
+                    )}
+                    {copiedTempPassword && <span className="text-xs text-emerald-700">Copied!</span>}
+                  </div>
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={resendingOnboarding}
+                      onClick={() => {
+                        void (async () => {
+                          setResendingOnboarding(true);
+                          try {
+                            const out = await resendAdminResidentOnboarding(selected.id);
+                            const updatedAuth = {
+                              ...selected.auth,
+                              userId: out.auth.userId,
+                              mustResetPassword: out.auth.mustResetPassword,
+                              temporaryPassword: out.auth.temporaryPassword,
+                            };
+                            setSelected((cur) => (cur ? { ...cur, auth: updatedAuth } : cur));
+                            setResidents((prev) =>
+                              prev.map((r) => (r.id === selected.id ? { ...r, auth: updatedAuth } : r)),
+                            );
+                            setCreatedTempPassword(out.auth.temporaryPassword);
+                            enqueueNotice("Success", out.message ?? "Onboarding credentials resent successfully.");
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Failed to resend onboarding credentials");
+                          } finally {
+                            setResendingOnboarding(false);
+                          }
+                        })();
+                      }}
+                    >
+                      {resendingOnboarding ? "Resending..." : "Resend onboarding credentials"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!selected.auth?.temporaryPassword && (
+                <div className="mt-4 rounded-xl border border-border bg-card p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Onboarding credentials
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    No active temporary password. You can generate and resend onboarding credentials.
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={resendingOnboarding}
+                      onClick={() => {
+                        void (async () => {
+                          setResendingOnboarding(true);
+                          try {
+                            const out = await resendAdminResidentOnboarding(selected.id);
+                            const updatedAuth = {
+                              ...selected.auth,
+                              userId: out.auth.userId,
+                              mustResetPassword: out.auth.mustResetPassword,
+                              temporaryPassword: out.auth.temporaryPassword,
+                            };
+                            setSelected((cur) => (cur ? { ...cur, auth: updatedAuth } : cur));
+                            setResidents((prev) =>
+                              prev.map((r) => (r.id === selected.id ? { ...r, auth: updatedAuth } : r)),
+                            );
+                            setCreatedTempPassword(out.auth.temporaryPassword);
+                            enqueueNotice("Success", out.message ?? "Onboarding credentials resent successfully.");
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Failed to resend onboarding credentials");
+                          } finally {
+                            setResendingOnboarding(false);
+                          }
+                        })();
+                      }}
+                    >
+                      {resendingOnboarding ? "Resending..." : "Resend onboarding credentials"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 space-y-4">
                 {/* Primary CTA */}
                 <Link
@@ -513,9 +690,12 @@ export default function ResidentsPage() {
                         <button
                           type="button"
                           className="h-10 px-4 rounded-md border border-border bg-background hover:bg-muted text-sm font-medium"
-                          onClick={() => approve(selected.id)}
+                          disabled={statusSavingId === selected.id}
+                          onClick={() => {
+                            void updateResidentStatus(selected.id, "Active");
+                          }}
                         >
-                          Approve resident
+                          {statusSavingId === selected.id ? "Updating..." : "Approve resident"}
                         </button>
                       )}
 
@@ -523,9 +703,12 @@ export default function ResidentsPage() {
                         <button
                           type="button"
                           className="h-10 px-4 rounded-md border border-border bg-background hover:bg-muted text-sm font-medium"
-                          onClick={() => reactivate(selected.id)}
+                          disabled={statusSavingId === selected.id}
+                          onClick={() => {
+                            void updateResidentStatus(selected.id, "Active");
+                          }}
                         >
-                          Reactivate resident
+                          {statusSavingId === selected.id ? "Updating..." : "Reactivate resident"}
                         </button>
                       )}
                     </div>
@@ -538,16 +721,28 @@ export default function ResidentsPage() {
                     Danger zone
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Deactivating blocks resident access and revokes all guest passes linked to this resident.
+                    Deactivating blocks resident access. Deleting permanently removes the resident and linked access records.
                   </p>
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-2">
                     <button
                       type="button"
                       className="w-full h-10 px-4 rounded-md cursor-pointer border border-destructive/30 bg-background hover:bg-destructive/10 text-sm font-medium text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={selected.status === "Inactive"}
-                      onClick={() => deactivate(selected.id)}
+                      disabled={selected.status === "Inactive" || statusSavingId === selected.id}
+                      onClick={() => {
+                        void updateResidentStatus(selected.id, "Inactive");
+                      }}
                     >
-                      Deactivate resident
+                      {statusSavingId === selected.id ? "Updating..." : "Deactivate resident"}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full h-10 px-4 rounded-md cursor-pointer border border-destructive/30 bg-background hover:bg-destructive/10 text-sm font-medium text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={deletingResident}
+                      onClick={() => {
+                        setPendingDeleteResident(selected);
+                      }}
+                    >
+                      {deletingResident ? "Deleting..." : "Delete resident"}
                     </button>
                   </div>
                 </div>
@@ -556,6 +751,53 @@ export default function ResidentsPage() {
           </div>
         )}
       </Modal>
+
+      <Modal
+        isOpen={Boolean(pendingDeleteResident)}
+        onClose={() => {
+          if (deletingResident) return;
+          setPendingDeleteResident(null);
+          setDeleteError(null);
+        }}
+        title="Delete resident"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Delete{" "}
+            <span className="font-medium text-foreground">{pendingDeleteResident?.name}</span>? This permanently removes
+            the resident account and related records.
+          </p>
+          {deleteError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={deletingResident}
+              onClick={() => {
+                setPendingDeleteResident(null);
+                setDeleteError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingResident || !pendingDeleteResident}
+              onClick={() => {
+                if (!pendingDeleteResident) return;
+                void deleteResidentAction(pendingDeleteResident);
+              }}
+            >
+              {deletingResident ? "Deleting..." : "Confirm delete"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
 
       <Modal
         isOpen={createOpen}
@@ -609,6 +851,33 @@ export default function ResidentsPage() {
           {error && (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {error}
+            </div>
+          )}
+
+          {createdTempPassword && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+              <p className="font-semibold text-foreground">Default password generated</p>
+              <p className="mt-1 font-mono text-foreground break-all">{createdTempPassword}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Share this with the user. They must reset it after first sign-in.
+              </p>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(createdTempPassword);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy password
+                </Button>
+              </div>
             </div>
           )}
 

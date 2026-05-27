@@ -4,6 +4,7 @@ import { ArrowUpRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/modal";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ import {
   patchAdminPayment,
 } from "@/lib/estate-api";
 import { isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -47,6 +49,9 @@ export default function PaymentsPage() {
   const [createReference, setCreateReference] = useState<string>("");
   const [createNotes, setCreateNotes] = useState<string>("");
   const [createNotifyResident, setCreateNotifyResident] = useState(true);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   useEffect(() => {
     const load = async () => {
@@ -132,6 +137,7 @@ export default function PaymentsPage() {
             setCreateReference("");
             setCreateNotes("");
             setCreateNotifyResident(true);
+            setCreateError(null);
           }}
         >
           Create payment
@@ -306,6 +312,12 @@ export default function PaymentsPage() {
                 />
               </div>
 
+              {updateError && (
+                <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {updateError}
+                </div>
+              )}
+
               <div className="mt-3 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
                 <Button
                   type="button"
@@ -326,16 +338,19 @@ export default function PaymentsPage() {
 
                     if (isApiMode()) {
                       void (async () => {
+                        setUpdateError(null);
                         try {
-                          const updated = await patchAdminPayment(selected.id, {
+                          const out = await patchAdminPayment(selected.id, {
                             type: typeDraft.trim() || selected.type,
                             status: statusDraft,
                             notes,
                           });
-                          setPayments((prev) => prev.map((p) => (p.id === selected.id ? updated : p)));
-                          setSelected(updated);
-                        } catch {
-                          /* ignore */
+                          setPayments((prev) => prev.map((p) => (p.id === selected.id ? out.payment : p)));
+                          setSelected(out.payment);
+                          enqueueNotice("Success", out.message);
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : "Failed to update payment";
+                          setUpdateError(msg);
                         }
                       })();
                       return;
@@ -376,10 +391,16 @@ export default function PaymentsPage() {
         onClose={() => {
           if (creating) return;
           setCreateOpen(false);
+          setCreateError(null);
         }}
         title="Create payment"
       >
         <div className="space-y-4">
+          {createError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {createError}
+            </div>
+          )}
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Resident</p>
@@ -484,9 +505,10 @@ export default function PaymentsPage() {
 
                 if (isApiMode()) {
                   setCreating(true);
+                  setCreateError(null);
                   void (async () => {
                     try {
-                      const nextPayment = await createAdminPaymentRequest({
+                      const out = await createAdminPaymentRequest({
                         residentId: resident.id,
                         amount: createAmount.trim(),
                         type: createType.trim(),
@@ -495,18 +517,19 @@ export default function PaymentsPage() {
                         dateLabel,
                         reference,
                       });
-                      setPayments((prev) => [nextPayment, ...prev]);
-                      setSelected(nextPayment);
+                      setPayments((prev) => [out.payment, ...prev]);
+                      setSelected(out.payment);
                       setCreateOpen(false);
+                      enqueueNotice("Success", out.message);
                       if (createNotifyResident) {
                         pushResidentNotification({
                           residentId: resident.id,
                           type: "payment",
-                          message: `Payment created: ${nextPayment.type}\nAmount: ${nextPayment.amount}\nDue: ${nextPayment.dateLabel}\nStatus: ${nextPayment.status}`,
+                          message: `Payment created: ${out.payment.type}\nAmount: ${out.payment.amount}\nDue: ${out.payment.dateLabel}\nStatus: ${out.payment.status}`,
                         });
                       }
-                    } catch {
-                      /* ignore */
+                    } catch (e) {
+                      setCreateError(e instanceof Error ? e.message : "Failed to create payment");
                     } finally {
                       setCreating(false);
                     }
@@ -555,6 +578,8 @@ export default function PaymentsPage() {
           </div>
         </div>
       </Modal>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

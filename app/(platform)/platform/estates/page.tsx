@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import type { PlatformEstateRow } from "@/lib/estate-api";
 import { deletePlatformEstate, fetchPlatformEstates, patchPlatformEstate } from "@/lib/estate-api";
+import { useMessageModals } from "@/lib/use-message-modals";
 import { isApiMode } from "@/lib/session";
 
 type Filter = "all" | "pending" | "active" | "suspended";
-type ToastTone = "success" | "error" | "warning";
 
 export default function PlatformEstatesPage() {
   const [filter, setFilter] = useState<Filter>("all");
@@ -15,8 +18,9 @@ export default function PlatformEstatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   const load = useCallback(async () => {
     if (!isApiMode()) {
@@ -55,37 +59,37 @@ export default function PlatformEstatesPage() {
     setBusyId(estateId);
     setError(null);
     try {
-      await patchPlatformEstate(estateId, { action });
+      const out = await patchPlatformEstate(estateId, { action });
       await load();
-      setToast({ message: `Estate updated: ${action}.`, tone: "success" });
+      enqueueNotice("Success", out.message ?? `Estate ${action} completed successfully.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Update failed");
-      setToast({ message: e instanceof Error ? e.message : "Update failed", tone: "error" });
+      const msg = e instanceof Error ? e.message : "Update failed";
+      setError(msg);
+      enqueueNotice("Update failed", msg);
     } finally {
       setBusyId(null);
     }
   };
 
   const requestDelete = (estateId: string, estateName: string) => {
+    setDeleteError(null);
     setPendingDelete({ id: estateId, name: estateName });
-    setToast({
-      message: `Delete "${estateName}"? This permanently removes the estate and related tenant data.`,
-      tone: "warning",
-    });
   };
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     setBusyId(pendingDelete.id);
     setError(null);
+    setDeleteError(null);
     try {
-      await deletePlatformEstate(pendingDelete.id);
+      const out = await deletePlatformEstate(pendingDelete.id);
       await load();
-      setToast({ message: `Estate "${pendingDelete.name}" deleted.`, tone: "success" });
       setPendingDelete(null);
+      enqueueNotice("Success", out.message ?? `Estate "${pendingDelete.name}" deleted successfully.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed");
-      setToast({ message: e instanceof Error ? e.message : "Delete failed", tone: "error" });
+      const msg = e instanceof Error ? e.message : "Delete failed";
+      setError(msg);
+      setDeleteError(msg);
     } finally {
       setBusyId(null);
     }
@@ -100,54 +104,6 @@ export default function PlatformEstatesPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {toast && (
-        <div className="fixed right-4 top-4 z-60 w-[min(28rem,calc(100vw-2rem))]">
-          <div
-            className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
-              toast.tone === "success"
-                ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                : toast.tone === "warning"
-                  ? "border-amber-300 bg-amber-50 text-amber-900"
-                  : "border-destructive/40 bg-destructive/10 text-destructive"
-            }`}
-          >
-            <p>{toast.message}</p>
-            <div className="mt-3 flex items-center justify-end gap-2">
-              {pendingDelete && toast.tone === "warning" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingDelete(null);
-                      setToast(null);
-                    }}
-                    className="rounded-md border border-border px-2.5 py-1 text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyId === pendingDelete.id}
-                    onClick={() => void confirmDelete()}
-                    className="rounded-md bg-destructive px-2.5 py-1 text-xs font-medium text-destructive-foreground disabled:opacity-50"
-                  >
-                    Confirm delete
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setToast(null)}
-                  className="rounded-md border border-border px-2.5 py-1 text-xs"
-                >
-                  Dismiss
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div>
         <h2 className="font-display text-xl font-bold text-foreground">All estates</h2>
         <p className="text-sm text-muted-foreground">
@@ -266,6 +222,49 @@ export default function PlatformEstatesPage() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={Boolean(pendingDelete)}
+        onClose={() => {
+          if (busyId === pendingDelete?.id) return;
+          setPendingDelete(null);
+          setDeleteError(null);
+        }}
+        title="Delete estate"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{pendingDelete?.name}</span>? This permanently
+            removes the estate and related tenant data.
+          </p>
+          {deleteError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={busyId === pendingDelete?.id}
+              onClick={() => {
+                setPendingDelete(null);
+                setDeleteError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!pendingDelete || busyId === pendingDelete.id}
+              onClick={() => void confirmDelete()}
+            >
+              {busyId === pendingDelete?.id ? "Deleting..." : "Confirm delete"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

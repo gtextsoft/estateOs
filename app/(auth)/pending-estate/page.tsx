@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { meRequest } from "@/lib/estate-api";
+import { mustResetLoginPath, userMustResetPassword } from "@/lib/must-reset-password";
 import { isApiMode } from "@/lib/session";
 
 export default function PendingEstatePage() {
@@ -16,6 +17,10 @@ export default function PendingEstatePage() {
     void (async () => {
       try {
         const m = await meRequest();
+        if (userMustResetPassword(m.user)) {
+          router.replace(mustResetLoginPath("/pending-estate"));
+          return;
+        }
         const st = m.user.estate?.status;
         if (st === "active") {
           router.replace("/dashboard");

@@ -13,7 +13,9 @@ import type {
 } from "@/components/dashboard/securityStore";
 import type { EmergencyAlert } from "@/components/dashboard/emergencyStore";
 
+import { mustResetLoginPath } from "./must-reset-password";
 import { clearSession, getApiBase } from "./session";
+import { API_ROUTES } from "./api-routes";
 
 const CSRF_COOKIE = "estateos_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
@@ -31,7 +33,20 @@ type ApiErrorCode =
   | "KYC_REQUIRED"
   | "ESTATE_PENDING"
   | "ESTATE_SUSPENDED"
-  | "ESTATE_NOT_ACTIVE";
+  | "ESTATE_NOT_ACTIVE"
+  | "PASSWORD_RESET_REQUIRED";
+
+export class ApiHttpError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiHttpError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const base = getApiBase();
@@ -47,7 +62,12 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
     if (csrf) headers.set(CSRF_HEADER, csrf);
   }
 
-  const res = await fetch(`${base}/api${path}`, { ...init, credentials: "include", headers });
+  const res = await fetch(`${base}/api${path}`, {
+    ...init,
+    credentials: "include",
+    headers,
+    cache: "no-store",
+  });
 
   if (
     res.status === 401 &&
@@ -67,6 +87,11 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
       if (parsed.code === "ESTATE_PENDING" || parsed.code === "ESTATE_SUSPENDED" || parsed.code === "ESTATE_NOT_ACTIVE") {
         if (window.location.pathname !== "/pending-estate") window.location.href = "/pending-estate";
       }
+      if (parsed.code === "PASSWORD_RESET_REQUIRED") {
+        if (window.location.pathname !== "/login") {
+          window.location.href = mustResetLoginPath(window.location.pathname);
+        }
+      }
     } catch {
       // ignore malformed payloads
     }
@@ -79,13 +104,15 @@ async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (!res.ok) {
     let msg = res.statusText;
+    let code: string | undefined;
     try {
-      const j = JSON.parse(text) as { error?: string };
+      const j = JSON.parse(text) as { error?: string; code?: string };
       if (j.error) msg = j.error;
+      if (j.code) code = j.code;
     } catch {
       if (text) msg = text;
     }
-    throw new Error(msg);
+    throw new ApiHttpError(msg, res.status, code);
   }
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
@@ -101,6 +128,7 @@ function monthYearFromDate(d: Date | string | undefined): string {
 }
 
 export function mapResidentDoc(doc: Json): ResidentRecord {
+  const authRaw = doc.auth as Record<string, unknown> | undefined;
   return {
     id: idOf(doc as { _id: unknown }),
     code: doc.code ? String(doc.code) : undefined,
@@ -110,6 +138,13 @@ export function mapResidentDoc(doc: Json): ResidentRecord {
     block: doc.block ? String(doc.block) : undefined,
     email: String(doc.email ?? ""),
     phone: doc.phone ? String(doc.phone) : undefined,
+    auth: authRaw
+      ? {
+          userId: authRaw.userId ? String(authRaw.userId) : undefined,
+          mustResetPassword: Boolean(authRaw.mustResetPassword),
+          temporaryPassword: authRaw.temporaryPassword ? String(authRaw.temporaryPassword) : undefined,
+        }
+      : undefined,
     status: doc.status as ResidentRecord["status"],
     since: monthYearFromDate(doc.createdAt as string | undefined),
   };
@@ -286,7 +321,7 @@ export function mapPresenceDoc(doc: Json, subjectCode: string): [string, Securit
 // ——— Auth ———
 
 export async function loginEmailRequest(body: { email: string; password: string }) {
-  const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(body) });
+  const res = await apiFetch(API_ROUTES.auth.login, { method: "POST", body: JSON.stringify(body) });
   return readJson<{
     ok: boolean;
     token: string;
@@ -296,6 +331,7 @@ export async function loginEmailRequest(body: { email: string; password: string 
     estateId?: string;
     kycStatus?: string;
     estateStatus?: string;
+    mustResetPassword?: boolean;
     legacy?: boolean;
   }>(res);
 }
@@ -305,7 +341,7 @@ export async function loginLegacyRequest(body: {
   role: "resident" | "guard" | "manager";
   residentCode?: string;
 }) {
-  const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(body) });
+  const res = await apiFetch(API_ROUTES.auth.login, { method: "POST", body: JSON.stringify(body) });
   return readJson<{ ok: boolean; token: string; userId: string; role: string; legacy?: boolean }>(res);
 }
 
@@ -317,9 +353,10 @@ export async function registerEstateRequest(body: {
   managerName?: string;
   verificationToken: string;
 }) {
-  const res = await apiFetch("/auth/register-estate", { method: "POST", body: JSON.stringify(body) });
+  const res = await apiFetch(API_ROUTES.auth.registerEstate, { method: "POST", body: JSON.stringify(body) });
   return readJson<{
     ok: boolean;
+    message?: string;
     token: string;
     userId: string;
     role: string;
@@ -341,7 +378,7 @@ export async function signupRequest(body: {
   kyc?: { fullName?: string; phone?: string; nationalIdOrPassport?: string; notes?: string };
   verificationToken: string;
 }) {
-  const res = await apiFetch("/auth/signup", { method: "POST", body: JSON.stringify(body) });
+  const res = await apiFetch(API_ROUTES.auth.signup, { method: "POST", body: JSON.stringify(body) });
   return readJson<{
     ok: boolean;
     token: string;
@@ -357,9 +394,10 @@ export async function requestVerificationCode(body: {
   email: string;
   intent: "signup" | "register-estate";
 }) {
-  const res = await apiFetch("/auth/verification/request", { method: "POST", body: JSON.stringify(body) });
+  const res = await apiFetch(API_ROUTES.auth.verificationRequest, { method: "POST", body: JSON.stringify(body) });
   return readJson<{
     ok: boolean;
+    message?: string;
     expiresInSeconds: number;
     devCode?: string;
     emailDelivery?: "sent" | "skipped";
@@ -371,22 +409,37 @@ export async function confirmVerificationCode(body: {
   intent: "signup" | "register-estate";
   code: string;
 }) {
-  const res = await apiFetch("/auth/verification/confirm", { method: "POST", body: JSON.stringify(body) });
-  return readJson<{ ok: boolean; verificationToken: string }>(res);
+  const res = await apiFetch(API_ROUTES.auth.verificationConfirm, { method: "POST", body: JSON.stringify(body) });
+  return readJson<{ ok: boolean; message?: string; verificationToken: string }>(res);
 }
 
 export async function resolveEstateSlug(slug: string) {
-  const res = await apiFetch(`/estates/resolve?slug=${encodeURIComponent(slug)}`);
+  const res = await apiFetch(API_ROUTES.estates.resolve(slug));
   return readJson<{ ok: boolean; estate: { id: string; name: string; slug: string } }>(res);
 }
 
+export async function submitContactMessage(body: {
+  email: string;
+  message: string;
+  name?: string;
+  subject?: string;
+  phone?: string;
+  estate?: string;
+}) {
+  const res = await apiFetch(API_ROUTES.contact.submit, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return readJson<{ ok: boolean }>(res);
+}
+
 export async function logoutRequest() {
-  const res = await apiFetch("/auth/logout", { method: "POST" });
+  const res = await apiFetch(API_ROUTES.auth.logout, { method: "POST" });
   return readJson<{ ok: boolean }>(res);
 }
 
 export async function meRequest() {
-  const res = await apiFetch("/auth/me");
+  const res = await apiFetch(API_ROUTES.auth.me);
   return readJson<{
     ok: boolean;
     user: {
@@ -395,6 +448,7 @@ export async function meRequest() {
       role: string;
       email?: string;
       kycStatus?: string;
+      mustResetPassword?: boolean;
       estate?: { name?: string; slug?: string; status?: string };
       legacy?: boolean;
     };
@@ -416,8 +470,47 @@ export type PlatformEstateRow = {
   residentCount: number;
 };
 
+export type AuditLogRecord = {
+  id: string;
+  estateId?: string;
+  actorUserId?: string;
+  actorRole: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  metadata?: Record<string, unknown>;
+  ip?: string;
+  userAgent?: string;
+  createdAt?: string;
+};
+
+type AuditLogsResponse = {
+  ok: boolean;
+  items: Array<Record<string, unknown>>;
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+function mapAuditLogDoc(doc: Record<string, unknown>): AuditLogRecord {
+  return {
+    id: String(doc._id ?? ""),
+    estateId: doc.estateId ? String(doc.estateId) : undefined,
+    actorUserId: doc.actorUserId ? String(doc.actorUserId) : undefined,
+    actorRole: String(doc.actorRole ?? ""),
+    action: String(doc.action ?? ""),
+    targetType: doc.targetType ? String(doc.targetType) : undefined,
+    targetId: doc.targetId ? String(doc.targetId) : undefined,
+    metadata: (doc.metadata as Record<string, unknown> | undefined) ?? undefined,
+    ip: doc.ip ? String(doc.ip) : undefined,
+    userAgent: doc.userAgent ? String(doc.userAgent) : undefined,
+    createdAt: doc.createdAt ? String(doc.createdAt) : undefined,
+  };
+}
+
 export async function fetchPlatformSummary() {
-  const res = await apiFetch("/platform/summary");
+  const res = await apiFetch(API_ROUTES.platform.summary);
   return readJson<{
     ok: boolean;
     summary: {
@@ -430,15 +523,61 @@ export async function fetchPlatformSummary() {
 
 export async function fetchPlatformEstates(status?: "pending" | "active" | "suspended") {
   const q = status ? `?status=${encodeURIComponent(status)}` : "";
-  const res = await apiFetch(`/platform/estates${q}`);
+  const res = await apiFetch(API_ROUTES.platform.estates(q));
   const data = await readJson<{ ok: boolean; items: PlatformEstateRow[] }>(res);
   return data.items;
 }
 
 export async function fetchPlatformPendingEstates() {
-  const res = await apiFetch("/platform/estates/pending");
+  const res = await apiFetch(API_ROUTES.platform.pendingEstates);
   const data = await readJson<{ ok: boolean; items: PlatformEstateRow[] }>(res);
   return data.items;
+}
+
+export async function fetchPlatformAuditLogs(query?: {
+  estateId?: string;
+  action?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (query?.estateId) params.set("estateId", query.estateId);
+  if (query?.action) params.set("action", query.action);
+  if (query?.actorRole) params.set("actorRole", query.actorRole);
+  if (query?.from) params.set("from", query.from);
+  if (query?.to) params.set("to", query.to);
+  if (query?.page) params.set("page", String(query.page));
+  if (query?.limit) params.set("limit", String(query.limit));
+  const res = await apiFetch(API_ROUTES.platform.auditLogs(params.toString() || undefined));
+  const data = await readJson<AuditLogsResponse>(res);
+  return {
+    ...data,
+    items: data.items.map((i) => mapAuditLogDoc(i)),
+  };
+}
+
+export async function exportPlatformAuditLogsCsv(query?: {
+  estateId?: string;
+  action?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+}) {
+  const params = new URLSearchParams();
+  if (query?.estateId) params.set("estateId", query.estateId);
+  if (query?.action) params.set("action", query.action);
+  if (query?.actorRole) params.set("actorRole", query.actorRole);
+  if (query?.from) params.set("from", query.from);
+  if (query?.to) params.set("to", query.to);
+  const res = await apiFetch(API_ROUTES.platform.exportAuditLogs(params.toString() || undefined));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Export failed");
+  }
+  return res.blob();
 }
 
 export async function patchPlatformEstate(
@@ -448,18 +587,18 @@ export async function patchPlatformEstate(
     note?: string;
   },
 ) {
-  const res = await apiFetch(`/platform/estates/${encodeURIComponent(estateId)}`, {
+  const res = await apiFetch(API_ROUTES.platform.estateById(estateId), {
     method: "PATCH",
     body: JSON.stringify(input),
   });
-  return readJson(res);
+  return readJson<{ ok: boolean; message?: string }>(res);
 }
 
 export async function deletePlatformEstate(estateId: string) {
-  const res = await apiFetch(`/platform/estates/${encodeURIComponent(estateId)}`, {
+  const res = await apiFetch(API_ROUTES.platform.estateById(estateId), {
     method: "DELETE",
   });
-  return readJson<{ ok: boolean; deleted: { estateId: string; slug: string } }>(res);
+  return readJson<{ ok: boolean; message?: string; deleted: { estateId: string; slug: string } }>(res);
 }
 
 /** Approve or reject a pending estate registration. */
@@ -470,29 +609,29 @@ export async function reviewPlatformEstate(estateId: string, action: "approve" |
 // ——— Admin KYC ———
 
 export async function fetchAdminKycPending() {
-  const res = await apiFetch("/admin/kyc/pending");
+  const res = await apiFetch(API_ROUTES.admin.kycPending);
   const data = await readJson<{ ok: boolean; users: Json[] }>(res);
   return data.users;
 }
 
 export async function reviewAdminKyc(userId: string, action: "approve" | "reject", note?: string) {
-  const res = await apiFetch(`/admin/kyc/${encodeURIComponent(userId)}`, {
+  const res = await apiFetch(API_ROUTES.admin.kycReview(userId), {
     method: "PATCH",
     body: JSON.stringify({ action, note }),
   });
-  return readJson(res);
+  return readJson<{ ok: boolean; message?: string; userId: string; kycStatus: string }>(res);
 }
 
 // ——— Resident (/me) ———
 
 export async function fetchMyProfile() {
-  const res = await apiFetch("/me/profile");
+  const res = await apiFetch(API_ROUTES.me.profile);
   const data = await readJson<{ ok: boolean; resident: Json }>(res);
   return mapResidentDoc(data.resident);
 }
 
 export async function fetchMyGuestPasses() {
-  const res = await apiFetch("/me/guest-passes");
+  const res = await apiFetch(API_ROUTES.me.guestPasses);
   const data = await readJson<{ ok: boolean; passes: Json[] }>(res);
   return data.passes.map(mapGuestPassDoc);
 }
@@ -504,20 +643,20 @@ export async function createGuestPassRequest(input: {
   timeStart?: string;
   timeEnd?: string;
 }) {
-  const res = await apiFetch("/me/guest-passes", { method: "POST", body: JSON.stringify(input) });
+  const res = await apiFetch(API_ROUTES.me.guestPasses, { method: "POST", body: JSON.stringify(input) });
   const data = await readJson<{ ok: boolean; pass: Json }>(res);
   return mapGuestPassDoc(data.pass);
 }
 
 export async function revokeGuestPassRequest(passId: string) {
-  const res = await apiFetch(`/me/guest-passes/${encodeURIComponent(passId)}/revoke`, {
+  const res = await apiFetch(API_ROUTES.me.revokeGuestPass(passId), {
     method: "PATCH",
   });
   await readJson(res);
 }
 
 export async function fetchMyIncidents() {
-  const res = await apiFetch("/me/incidents");
+  const res = await apiFetch(API_ROUTES.me.incidents);
   const data = await readJson<{ ok: boolean; incidents: Json[] }>(res);
   return data.incidents.map(mapIncidentDoc);
 }
@@ -529,14 +668,14 @@ export async function createIncidentRequest(input: {
   incidentType?: IncidentTypeCategory;
   attachments?: string[];
 }) {
-  const res = await apiFetch("/me/incidents", { method: "POST", body: JSON.stringify(input) });
+  const res = await apiFetch(API_ROUTES.me.incidents, { method: "POST", body: JSON.stringify(input) });
   const data = await readJson<{ ok: boolean; incident: Json }>(res);
   return mapIncidentDoc(data.incident);
 }
 
 export async function fetchMyPayments() {
   const prof = await fetchMyProfile().catch(() => null);
-  const res = await apiFetch("/me/payments");
+  const res = await apiFetch(API_ROUTES.me.payments);
   const data = await readJson<{ ok: boolean; payments: Json[] }>(res);
   return data.payments.map((p) =>
     mapPaymentDoc(p, prof?.name ?? "", prof?.unit ?? ""),
@@ -544,20 +683,20 @@ export async function fetchMyPayments() {
 }
 
 export async function createPaymentRequestApi(input: { type: string; amount: string; notes?: string }) {
-  const res = await apiFetch("/me/payments", { method: "POST", body: JSON.stringify(input) });
+  const res = await apiFetch(API_ROUTES.me.payments, { method: "POST", body: JSON.stringify(input) });
   const data = await readJson<{ ok: boolean; payment: Json }>(res);
   const prof = await fetchMyProfile().catch(() => null);
   return mapPaymentDoc(data.payment, prof?.name ?? "", prof?.unit ?? "");
 }
 
 export async function fetchMyNotifications() {
-  const res = await apiFetch("/me/notifications");
+  const res = await apiFetch(API_ROUTES.me.notifications);
   const data = await readJson<{ ok: boolean; notifications: Json[] }>(res);
   return data.notifications.map(mapNotificationDoc);
 }
 
 export async function createEmergencyRequest(message?: string) {
-  const res = await apiFetch("/emergency/me", {
+  const res = await apiFetch(API_ROUTES.emergency.me, {
     method: "POST",
     body: JSON.stringify({ message: message ?? "" }),
   });
@@ -568,7 +707,7 @@ export async function createEmergencyRequest(message?: string) {
 // ——— Admin ———
 
 export async function fetchAdminResidents() {
-  const res = await apiFetch("/admin/residents");
+  const res = await apiFetch(API_ROUTES.admin.residents);
   const data = await readJson<{ ok: boolean; residents: Json[] }>(res);
   return data.residents.map(mapResidentDoc);
 }
@@ -612,19 +751,19 @@ export async function createAdminResident(input: {
   building?: string;
   block?: string;
 }) {
-  const res = await apiFetch("/admin/residents", { method: "POST", body: JSON.stringify(input) });
-  const data = await readJson<{ ok: boolean; resident: Json }>(res);
-  return mapResidentDoc(data.resident);
+  const res = await apiFetch(API_ROUTES.admin.residents, { method: "POST", body: JSON.stringify(input) });
+  const data = await readJson<{ ok: boolean; message?: string; resident: Json }>(res);
+  return { resident: mapResidentDoc(data.resident), message: data.message ?? "Resident created successfully." };
 }
 
 export async function fetchAdminIncidents() {
-  const res = await apiFetch("/admin/incidents");
+  const res = await apiFetch(API_ROUTES.admin.incidents);
   const data = await readJson<{ ok: boolean; incidents: Json[] }>(res);
   return data.incidents.map(mapIncidentDoc);
 }
 
 export async function fetchAdminIncidentDetail(incidentId: string) {
-  const res = await apiFetch(`/admin/incidents/${encodeURIComponent(incidentId)}`);
+  const res = await apiFetch(API_ROUTES.admin.incidentById(incidentId));
   const data = await readJson<{ ok: boolean; incident: Json; updates: Json[] }>(res);
   return {
     incident: mapIncidentDoc(data.incident),
@@ -641,12 +780,12 @@ export async function patchAdminIncident(
     attachments?: string[];
   },
 ) {
-  const res = await apiFetch(`/admin/incidents/${encodeURIComponent(incidentId)}`, {
+  const res = await apiFetch(API_ROUTES.admin.incidentById(incidentId), {
     method: "PATCH",
     body: JSON.stringify(body),
   });
-  const data = await readJson<{ ok: boolean; incident: Json }>(res);
-  return mapIncidentDoc(data.incident);
+  const data = await readJson<{ ok: boolean; message?: string; incident: Json }>(res);
+  return { incident: mapIncidentDoc(data.incident), message: data.message ?? "Incident updated successfully." };
 }
 
 export async function createAdminIncident(body: {
@@ -659,19 +798,19 @@ export async function createAdminIncident(body: {
   incidentType?: IncidentTypeCategory;
   attachments?: string[];
 }) {
-  const res = await apiFetch("/admin/incidents", { method: "POST", body: JSON.stringify(body) });
-  const data = await readJson<{ ok: boolean; incident: Json }>(res);
-  return mapIncidentDoc(data.incident);
+  const res = await apiFetch(API_ROUTES.admin.incidents, { method: "POST", body: JSON.stringify(body) });
+  const data = await readJson<{ ok: boolean; message?: string; incident: Json }>(res);
+  return { incident: mapIncidentDoc(data.incident), message: data.message ?? "Incident created successfully." };
 }
 
 export async function fetchAdminGuestPassesAll() {
-  const res = await apiFetch("/admin/guest-passes");
+  const res = await apiFetch(API_ROUTES.admin.guestPasses);
   const data = await readJson<{ ok: boolean; passes: Json[] }>(res);
   return data.passes.map(mapGuestPassDoc);
 }
 
 export async function fetchExpectedGuestPasses(date: string) {
-  const res = await apiFetch(`/admin/guest-passes/expected?date=${encodeURIComponent(date)}`);
+  const res = await apiFetch(API_ROUTES.admin.expectedGuestPasses(date));
   const data = await readJson<{ ok: boolean; date: string; passes: Json[] }>(res);
   return data.passes.map((p) => {
     const pass = mapGuestPassDoc(p);
@@ -707,7 +846,7 @@ function mapBlacklistDoc(doc: Json): BlacklistEntryRecord {
 }
 
 export async function fetchAdminBlacklist() {
-  const res = await apiFetch("/admin/blacklist");
+  const res = await apiFetch(API_ROUTES.admin.blacklist);
   const data = await readJson<{ ok: boolean; blacklist: Json[] }>(res);
   return data.blacklist.map(mapBlacklistDoc);
 }
@@ -717,7 +856,7 @@ export async function createAdminBlacklistEntry(input: {
   reason: string;
   expiresAt?: string | null;
 }) {
-  const res = await apiFetch("/admin/blacklist", { method: "POST", body: JSON.stringify(input) });
+  const res = await apiFetch(API_ROUTES.admin.blacklist, { method: "POST", body: JSON.stringify(input) });
   const data = await readJson<{ ok: boolean; entry: Json }>(res);
   return mapBlacklistDoc(data.entry);
 }
@@ -726,7 +865,7 @@ export async function patchAdminBlacklistEntry(
   id: string,
   body: { active?: boolean; reason?: string; expiresAt?: string | null },
 ) {
-  const res = await apiFetch(`/admin/blacklist/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(API_ROUTES.admin.blacklistById(id), {
     method: "PATCH",
     body: JSON.stringify(body),
   });
@@ -736,14 +875,33 @@ export async function patchAdminBlacklistEntry(
 
 export async function patchAdminResident(
   residentId: string,
-  body: { building?: string; block?: string; unit?: string; name?: string; phone?: string },
+  body: { building?: string; block?: string; unit?: string; name?: string; phone?: string; status?: "Active" | "Pending" | "Inactive" },
 ) {
-  const res = await apiFetch(`/admin/residents/${encodeURIComponent(residentId)}`, {
+  const res = await apiFetch(API_ROUTES.admin.residentById(residentId), {
     method: "PATCH",
     body: JSON.stringify(body),
   });
-  const data = await readJson<{ ok: boolean; resident: Json }>(res);
-  return mapResidentDoc(data.resident);
+  const data = await readJson<{ ok: boolean; message?: string; resident: Json }>(res);
+  return { resident: mapResidentDoc(data.resident), message: data.message ?? "Resident updated successfully." };
+}
+
+export async function resendAdminResidentOnboarding(residentId: string) {
+  const res = await apiFetch(API_ROUTES.admin.resendOnboarding(residentId), {
+    method: "POST",
+  });
+  return readJson<{
+    ok: boolean;
+    message?: string;
+    residentId: string;
+    auth: { userId: string; mustResetPassword: boolean; temporaryPassword: string };
+  }>(res);
+}
+
+export async function deleteAdminResident(residentId: string) {
+  const res = await apiFetch(API_ROUTES.admin.residentById(residentId), {
+    method: "DELETE",
+  });
+  return readJson<{ ok: boolean; message?: string; deleted: { residentId: string; userId: string | null } }>(res);
 }
 
 export async function createAdminGuestPass(
@@ -756,16 +914,13 @@ export async function createAdminGuestPass(
     timeEnd?: string;
   },
 ) {
-  const res = await apiFetch(
-    `/admin/residents/${encodeURIComponent(residentId)}/guest-passes`,
-    { method: "POST", body: JSON.stringify(input) },
-  );
+  const res = await apiFetch(API_ROUTES.admin.residentGuestPasses(residentId), { method: "POST", body: JSON.stringify(input) });
   const data = await readJson<{ ok: boolean; pass: Json }>(res);
   return mapGuestPassDoc(data.pass);
 }
 
 export async function patchAdminGuestPass(passId: string, status: GuestPass["status"]) {
-  const res = await apiFetch(`/admin/guest-passes/${encodeURIComponent(passId)}`, {
+  const res = await apiFetch(API_ROUTES.admin.guestPassById(passId), {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
@@ -781,29 +936,35 @@ export async function createAdminPaymentRequest(input: {
   dateLabel?: string;
   reference?: string;
 }) {
-  const res = await apiFetch("/admin/payments", { method: "POST", body: JSON.stringify(input) });
-  const data = await readJson<{ ok: boolean; payment: Json }>(res);
+  const res = await apiFetch(API_ROUTES.admin.payments, { method: "POST", body: JSON.stringify(input) });
+  const data = await readJson<{ ok: boolean; message?: string; payment: Json }>(res);
   const residents = await fetchAdminResidents();
   const r = residents.find((x) => x.id === input.residentId);
-  return mapPaymentDoc(data.payment, r?.name ?? "", r?.unit ?? "");
+  return {
+    payment: mapPaymentDoc(data.payment, r?.name ?? "", r?.unit ?? ""),
+    message: data.message ?? "Payment created successfully.",
+  };
 }
 
 export async function patchAdminPayment(
   paymentId: string,
   body: { type?: string; status?: PaymentRecord["status"]; notes?: string },
 ) {
-  const res = await apiFetch(`/admin/payments/${encodeURIComponent(paymentId)}`, {
+  const res = await apiFetch(API_ROUTES.admin.paymentById(paymentId), {
     method: "PATCH",
     body: JSON.stringify(body),
   });
-  const data = await readJson<{ ok: boolean; payment: Json }>(res);
+  const data = await readJson<{ ok: boolean; message?: string; payment: Json }>(res);
   const residents = await fetchAdminResidents();
   const r = residents.find((x) => x.id === String(data.payment.residentId));
-  return mapPaymentDoc(data.payment, r?.name ?? "", r?.unit ?? "");
+  return {
+    payment: mapPaymentDoc(data.payment, r?.name ?? "", r?.unit ?? ""),
+    message: data.message ?? "Payment updated successfully.",
+  };
 }
 
 export async function fetchAdminPayments() {
-  const res = await apiFetch("/admin/payments");
+  const res = await apiFetch(API_ROUTES.admin.payments);
   const data = await readJson<{ ok: boolean; payments: Json[] }>(res);
   const residents = await fetchAdminResidents();
   const byId = new Map(residents.map((r) => [r.id, r]));
@@ -814,26 +975,68 @@ export async function fetchAdminPayments() {
 }
 
 export async function fetchAdminNotifications() {
-  const res = await apiFetch("/admin/notifications");
+  const res = await apiFetch(API_ROUTES.admin.notifications);
   const data = await readJson<{ ok: boolean; notifications: Json[] }>(res);
   return data.notifications;
 }
 
 export async function markAdminNotificationsRead() {
-  const res = await apiFetch("/admin/notifications/mark-all-read", { method: "PATCH" });
+  const res = await apiFetch(API_ROUTES.admin.markNotificationsRead, { method: "PATCH" });
   await readJson(res);
+}
+
+export async function fetchAdminAuditLogs(query?: {
+  action?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (query?.action) params.set("action", query.action);
+  if (query?.actorRole) params.set("actorRole", query.actorRole);
+  if (query?.from) params.set("from", query.from);
+  if (query?.to) params.set("to", query.to);
+  if (query?.page) params.set("page", String(query.page));
+  if (query?.limit) params.set("limit", String(query.limit));
+  const res = await apiFetch(API_ROUTES.admin.auditLogs(params.toString() || undefined));
+  const data = await readJson<AuditLogsResponse>(res);
+  return {
+    ...data,
+    items: data.items.map((i) => mapAuditLogDoc(i)),
+  };
+}
+
+export async function exportAdminAuditLogsCsv(query?: {
+  action?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+}) {
+  const params = new URLSearchParams();
+  if (query?.action) params.set("action", query.action);
+  if (query?.actorRole) params.set("actorRole", query.actorRole);
+  if (query?.from) params.set("from", query.from);
+  if (query?.to) params.set("to", query.to);
+  const res = await apiFetch(API_ROUTES.admin.exportAuditLogs(params.toString() || undefined));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Export failed");
+  }
+  return res.blob();
 }
 
 // ——— Security ———
 
 export async function fetchSecurityGates() {
-  const res = await apiFetch("/security/gates");
+  const res = await apiFetch(API_ROUTES.security.gates);
   const data = await readJson<{ ok: boolean; gates: Json[] }>(res);
   return data.gates.map(mapGateDoc);
 }
 
 export async function createSecurityGate(input: { name: string; idKey: string; status?: string }) {
-  const res = await apiFetch("/security/gates", {
+  const res = await apiFetch(API_ROUTES.security.gates, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -842,23 +1045,23 @@ export async function createSecurityGate(input: { name: string; idKey: string; s
 }
 
 export async function requestPasswordReset(email: string) {
-  const res = await apiFetch("/auth/password-reset/request", {
+  const res = await apiFetch(API_ROUTES.auth.passwordResetRequest, {
     method: "POST",
     body: JSON.stringify({ email }),
   });
-  return readJson<{ ok: boolean; devCode?: string; expiresInSeconds?: number }>(res);
+  return readJson<{ ok: boolean; message?: string; devCode?: string; expiresInSeconds?: number }>(res);
 }
 
 export async function confirmPasswordReset(body: { email: string; code: string; password: string }) {
-  const res = await apiFetch("/auth/password-reset/confirm", {
+  const res = await apiFetch(API_ROUTES.auth.passwordResetConfirm, {
     method: "POST",
     body: JSON.stringify(body),
   });
-  return readJson<{ ok: boolean }>(res);
+  return readJson<{ ok: boolean; message?: string }>(res);
 }
 
 export async function fetchSecurityEvents(query?: { gateId?: string; q?: string; limit?: number }) {
-  const gatesRes = await apiFetch("/security/gates");
+  const gatesRes = await apiFetch(API_ROUTES.security.gates);
   const gatesJson = await readJson<{ ok: boolean; gates: Json[] }>(gatesRes);
   const gateMongoIdToIdKey = new Map<string, string>();
   const idKeyToMongoId = new Map<string, string>();
@@ -880,7 +1083,7 @@ export async function fetchSecurityEvents(query?: { gateId?: string; q?: string;
   if (query?.limit) sp.set("limit", String(query.limit));
   const qs = sp.toString();
 
-  const res = await apiFetch(`/security/events${qs ? `?${qs}` : ""}`);
+  const res = await apiFetch(API_ROUTES.security.events(qs || undefined));
   const data = await readJson<{ ok: boolean; events: Json[] }>(res);
   return data.events.map((e) => mapSecurityEventDoc(e, gateMongoIdToIdKey));
 }
@@ -890,14 +1093,14 @@ export async function securityScanRequest(input: {
   gateId: string;
   action?: "entry" | "exit" | "auto";
 }) {
-  const gatesRes = await apiFetch("/security/gates");
+  const gatesRes = await apiFetch(API_ROUTES.security.gates);
   const gatesJson = await readJson<{ ok: boolean; gates: Json[] }>(gatesRes);
   const gateMongoIdToIdKey = new Map<string, string>();
   for (const g of gatesJson.gates) {
     gateMongoIdToIdKey.set(idOf(g as { _id: unknown }), String((g as Json).idKey ?? ""));
   }
 
-  const res = await apiFetch("/security/scans", {
+  const res = await apiFetch(API_ROUTES.security.scans, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -910,14 +1113,14 @@ export async function securityManualDenialRequest(input: {
   reason: string;
   subjectCode?: string;
 }) {
-  const gatesRes = await apiFetch("/security/gates");
+  const gatesRes = await apiFetch(API_ROUTES.security.gates);
   const gatesJson = await readJson<{ ok: boolean; gates: Json[] }>(gatesRes);
   const gateMongoIdToIdKey = new Map<string, string>();
   for (const g of gatesJson.gates) {
     gateMongoIdToIdKey.set(idOf(g as { _id: unknown }), String((g as Json).idKey ?? ""));
   }
 
-  const res = await apiFetch("/security/manual-denials", {
+  const res = await apiFetch(API_ROUTES.security.manualDenials, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -926,13 +1129,13 @@ export async function securityManualDenialRequest(input: {
 }
 
 export async function fetchSecurityEmergencyAlerts() {
-  const res = await apiFetch("/security/emergency-alerts");
+  const res = await apiFetch(API_ROUTES.security.emergencyAlerts);
   const data = await readJson<{ ok: boolean; alerts: Json[] }>(res);
   return data.alerts.map(mapEmergencyDoc);
 }
 
 export async function ackSecurityEmergencyAlert(id: string, acknowledgedByUserId?: string) {
-  const res = await apiFetch(`/security/emergency-alerts/${encodeURIComponent(id)}/ack`, {
+  const res = await apiFetch(API_ROUTES.security.acknowledgeEmergency(id), {
     method: "POST",
     body: JSON.stringify({ acknowledgedByUserId }),
   });
@@ -941,7 +1144,7 @@ export async function ackSecurityEmergencyAlert(id: string, acknowledgedByUserId
 }
 
 export async function fetchSecurityPresenceMap() {
-  const res = await apiFetch("/security/presence");
+  const res = await apiFetch(API_ROUTES.security.presence);
   const data = await readJson<{ ok: boolean; presence: Json[] }>(res);
   const out: Record<string, SecurityPresenceRecord> = {};
   for (const row of data.presence) {

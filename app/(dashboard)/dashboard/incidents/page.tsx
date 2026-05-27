@@ -5,6 +5,7 @@ import { AlertTriangle, Clock, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import {
   loadIncidents,
   saveIncidents,
@@ -25,6 +26,7 @@ import {
   patchAdminIncident,
 } from "@/lib/estate-api";
 import { isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
@@ -48,6 +50,9 @@ export default function IncidentsPage() {
   const [draftStatus, setDraftStatus] = useState<IncidentStatus>("Open");
   const [draftUpdate, setDraftUpdate] = useState("");
   const [notifyResident, setNotifyResident] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   useEffect(() => {
     const load = async () => {
@@ -126,6 +131,7 @@ export default function IncidentsPage() {
             setCreateIncidentType("other");
             setCreateAttachments("");
             setCreateNotifyResident(true);
+            setCreateError(null);
           }}
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -344,6 +350,12 @@ export default function IncidentsPage() {
                 />
               </div>
 
+              {updateError && (
+                <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {updateError}
+                </div>
+              )}
+
               <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
                 <Button
                   type="button"
@@ -353,18 +365,21 @@ export default function IncidentsPage() {
 
                     if (isApiMode()) {
                       void (async () => {
+                        setUpdateError(null);
                         try {
                           const msg =
                             draftUpdate.trim() ||
                             `Status updated to ${draftStatus} for: ${selected.title}`;
-                          await patchAdminIncident(selected.id, { status: draftStatus, message: msg });
+                          const out = await patchAdminIncident(selected.id, { status: draftStatus, message: msg });
                           const detail = await fetchAdminIncidentDetail(selected.id);
                           const merged = { ...detail.incident, updates: detail.updates };
                           setIncidents((prev) => prev.map((i) => (i.id === selected.id ? merged : i)));
                           setSelected(merged);
                           setDraftUpdate("");
-                        } catch {
-                          /* ignore */
+                          enqueueNotice("Success", out.message);
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : "Failed to update incident";
+                          setUpdateError(msg);
                         }
                       })();
                       return;
@@ -444,10 +459,16 @@ export default function IncidentsPage() {
         onClose={() => {
           if (creating) return;
           setCreateOpen(false);
+          setCreateError(null);
         }}
         title="Report incident"
       >
         <div className="space-y-4">
+          {createError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {createError}
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Title
@@ -591,6 +612,7 @@ export default function IncidentsPage() {
 
                 if (isApiMode()) {
                   setCreating(true);
+                  setCreateError(null);
                   void (async () => {
                     try {
                       const parseUrls = (s: string) =>
@@ -598,7 +620,7 @@ export default function IncidentsPage() {
                           .split(/[,\n]/)
                           .map((x) => x.trim())
                           .filter(Boolean);
-                      const created = await createAdminIncident({
+                      const out = await createAdminIncident({
                         title,
                         reporter: createReporter.trim() || "Admin",
                         severity: createSeverity,
@@ -608,11 +630,12 @@ export default function IncidentsPage() {
                         incidentType: createIncidentType,
                         attachments: parseUrls(createAttachments),
                       });
-                      const detail = await fetchAdminIncidentDetail(created.id);
+                      const detail = await fetchAdminIncidentDetail(out.incident.id);
                       const merged = { ...detail.incident, updates: detail.updates };
                       setIncidents((prev) => [merged, ...prev.filter((i) => i.id !== merged.id)]);
                       setSelected(merged);
                       setCreateOpen(false);
+                      enqueueNotice("Success", out.message);
                       if (createNotifyResident && createResidentId) {
                         pushResidentNotification({
                           residentId: createResidentId,
@@ -621,8 +644,8 @@ export default function IncidentsPage() {
                           meta: { incidentId: merged.id, incidentStatus: createStatus },
                         });
                       }
-                    } catch {
-                      /* ignore */
+                    } catch (e) {
+                      setCreateError(e instanceof Error ? e.message : "Failed to create incident");
                     } finally {
                       setCreating(false);
                     }
@@ -692,6 +715,8 @@ export default function IncidentsPage() {
           </div>
         </div>
       </Modal>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

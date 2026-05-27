@@ -12,6 +12,11 @@ export type ResidentRecord = {
   block?: string;
   email: string;
   phone?: string;
+  auth?: {
+    userId?: string;
+    mustResetPassword?: boolean;
+    temporaryPassword?: string;
+  };
   status: ResidentStatus;
   since: string;
 };

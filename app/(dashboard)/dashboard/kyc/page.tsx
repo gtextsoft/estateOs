@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { fetchAdminKycPending, reviewAdminKyc } from "@/lib/estate-api";
 import { getClientRole, isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 
 type Row = { _id?: unknown; email?: string; role?: string; kyc?: Record<string, unknown> };
 
@@ -12,6 +14,7 @@ export default function ManagerKycPage() {
   const [users, setUsers] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   const load = async () => {
     setError(null);
@@ -37,10 +40,13 @@ export default function ManagerKycPage() {
 
   const act = async (userId: string, action: "approve" | "reject") => {
     try {
-      await reviewAdminKyc(userId, action);
+      const out = await reviewAdminKyc(userId, action);
       await load();
+      enqueueNotice("Success", out.message ?? `KYC ${action} completed successfully.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
+      const msg = e instanceof Error ? e.message : "Failed";
+      setError(msg);
+      enqueueNotice("KYC update failed", msg);
     }
   };
 
@@ -98,6 +104,8 @@ export default function ManagerKycPage() {
           })}
         </ul>
       )}
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

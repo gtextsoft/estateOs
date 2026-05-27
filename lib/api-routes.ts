@@ -1,0 +1,71 @@
+export const API_ROUTES = {
+  auth: {
+    login: "/auth/login",
+    registerEstate: "/auth/register-estate",
+    signup: "/auth/signup",
+    verificationRequest: "/auth/verification/request",
+    verificationConfirm: "/auth/verification/confirm",
+    logout: "/auth/logout",
+    me: "/auth/me",
+    passwordResetRequest: "/auth/password-reset/request",
+    passwordResetConfirm: "/auth/password-reset/confirm",
+  },
+  estates: {
+    resolve: (slug: string) => `/estates/resolve?slug=${encodeURIComponent(slug)}`,
+  },
+  contact: {
+    submit: "/contact",
+  },
+  platform: {
+    summary: "/platform/summary",
+    estates: (query?: string) => `/platform/estates${query ?? ""}`,
+    pendingEstates: "/platform/estates/pending",
+    estateById: (estateId: string) => `/platform/estates/${encodeURIComponent(estateId)}`,
+    auditLogs: (query?: string) => `/platform/audit-logs${query ? `?${query}` : ""}`,
+    exportAuditLogs: (query?: string) => `/platform/audit-logs/export${query ? `?${query}` : ""}`,
+  },
+  admin: {
+    kycPending: "/admin/kyc/pending",
+    kycReview: (userId: string) => `/admin/kyc/${encodeURIComponent(userId)}`,
+    residents: "/admin/residents",
+    residentById: (residentId: string) => `/admin/residents/${encodeURIComponent(residentId)}`,
+    resendOnboarding: (residentId: string) =>
+      `/admin/residents/${encodeURIComponent(residentId)}/resend-onboarding`,
+    residentGuestPasses: (residentId: string) =>
+      `/admin/residents/${encodeURIComponent(residentId)}/guest-passes`,
+    incidents: "/admin/incidents",
+    incidentById: (incidentId: string) => `/admin/incidents/${encodeURIComponent(incidentId)}`,
+    guestPasses: "/admin/guest-passes",
+    expectedGuestPasses: (date: string) => `/admin/guest-passes/expected?date=${encodeURIComponent(date)}`,
+    guestPassById: (passId: string) => `/admin/guest-passes/${encodeURIComponent(passId)}`,
+    blacklist: "/admin/blacklist",
+    blacklistById: (id: string) => `/admin/blacklist/${encodeURIComponent(id)}`,
+    payments: "/admin/payments",
+    paymentById: (paymentId: string) => `/admin/payments/${encodeURIComponent(paymentId)}`,
+    notifications: "/admin/notifications",
+    markNotificationsRead: "/admin/notifications/mark-all-read",
+    auditLogs: (query?: string) => `/admin/audit-logs${query ? `?${query}` : ""}`,
+    exportAuditLogs: (query?: string) => `/admin/audit-logs/export${query ? `?${query}` : ""}`,
+  },
+  me: {
+    profile: "/me/profile",
+    guestPasses: "/me/guest-passes",
+    revokeGuestPass: (passId: string) => `/me/guest-passes/${encodeURIComponent(passId)}/revoke`,
+    incidents: "/me/incidents",
+    payments: "/me/payments",
+    notifications: "/me/notifications",
+  },
+  emergency: {
+    me: "/emergency/me",
+  },
+  security: {
+    gates: "/security/gates",
+    events: (query?: string) => `/security/events${query ? `?${query}` : ""}`,
+    scans: "/security/scans",
+    manualDenials: "/security/manual-denials",
+    emergencyAlerts: "/security/emergency-alerts",
+    acknowledgeEmergency: (id: string) => `/security/emergency-alerts/${encodeURIComponent(id)}/ack`,
+    presence: "/security/presence",
+  },
+} as const;
+

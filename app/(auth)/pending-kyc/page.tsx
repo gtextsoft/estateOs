@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { meRequest } from "@/lib/estate-api";
+import { mustResetLoginPath, userMustResetPassword } from "@/lib/must-reset-password";
 import { isApiMode } from "@/lib/session";
 
 export default function PendingKycPage() {
@@ -15,6 +16,10 @@ export default function PendingKycPage() {
     void (async () => {
       try {
         const m = await meRequest();
+        if (userMustResetPassword(m.user)) {
+          router.replace(mustResetLoginPath("/pending-kyc"));
+          return;
+        }
         if (m.user.kycStatus === "approved") {
           if (m.user.role === "resident") router.replace("/residents");
           else if (m.user.role === "guard") router.replace("/security");

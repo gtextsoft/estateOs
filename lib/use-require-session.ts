@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { logoutRequest, meRequest } from "@/lib/estate-api";
+import { ApiHttpError, logoutRequest, meRequest } from "@/lib/estate-api";
+import { mustResetLoginPath, userMustResetPassword } from "@/lib/must-reset-password";
 import { clearSession, isApiMode, requireApiInProduction, setSession } from "@/lib/session";
 
 type SessionRole = "resident" | "guard" | "manager" | "platform_admin";
@@ -24,6 +25,7 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
   const [user, setUser] = useState<SessionUser | null>(null);
 
   const isEnabled = useMemo(() => isApiMode(), []);
+  const allowedRolesKey = useMemo(() => allowedRoles.slice().sort().join("|"), [allowedRoles]);
 
   useEffect(() => {
     if (!isEnabled) {
@@ -37,6 +39,10 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
     void (async () => {
       try {
         const session = await meRequest();
+        if (userMustResetPassword(session.user)) {
+          router.replace(mustResetLoginPath(pathname || "/"));
+          return;
+        }
         const role = session.user.role as SessionRole;
         if (!allowedRoles.includes(role)) {
           setError(`This page requires ${allowedRoles.join(" or ")} access. You are signed in as ${role}.`);
@@ -49,14 +55,21 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
           residentId: session.user.role === "resident" ? session.user.id : undefined,
         });
         setUser(session.user as SessionUser);
-      } catch {
-        router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
-        return;
+      } catch (err) {
+        if (err instanceof ApiHttpError && err.status === 401) {
+          router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+          return;
+        }
+        setError(
+          err instanceof Error
+            ? `Could not verify session right now: ${err.message}`
+            : "Could not verify session right now.",
+        );
       } finally {
         setReady(true);
       }
     })();
-  }, [allowedRoles, isEnabled, pathname, router]);
+  }, [allowedRolesKey, isEnabled, pathname, router]);
 
   const signOut = async () => {
     try {

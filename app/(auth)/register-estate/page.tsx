@@ -1,5 +1,6 @@
 "use client";
 
+import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,6 +8,12 @@ import { useState } from "react";
 
 import { confirmVerificationCode, registerEstateRequest, requestVerificationCode } from "@/lib/estate-api";
 import { isApiMode, setSession } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
+import { NoticeModal } from "@/components/ui/NoticeModal";
+
+const labelClass = "block text-sm font-medium text-muted-foreground";
+const inputClass =
+  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 export default function RegisterEstatePage() {
   const router = useRouter();
@@ -14,6 +21,7 @@ export default function RegisterEstatePage() {
   const [slug, setSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [managerName, setManagerName] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [verificationRequested, setVerificationRequested] = useState(false);
@@ -21,6 +29,7 @@ export default function RegisterEstatePage() {
   const [verificationInlineCode, setVerificationInlineCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +78,7 @@ export default function RegisterEstatePage() {
       setVerificationRequested(true);
       setVerificationToken(null);
       setVerificationInlineCode(out.devCode ?? null);
+      enqueueNotice("Verification code sent", out.message ?? "Verification code sent to your email.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send verification code");
     } finally {
@@ -91,6 +101,7 @@ export default function RegisterEstatePage() {
       });
       setVerificationToken(res.verificationToken);
       setVerificationInlineCode(null);
+      enqueueNotice("Email verified", res.message ?? "Email verified successfully.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid verification code");
     } finally {
@@ -116,40 +127,69 @@ export default function RegisterEstatePage() {
           </p>
 
           <form onSubmit={(e) => void submit(e)} className="space-y-4">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="Estate / community name"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              required
-              placeholder="URL slug (e.g. sunset-hills)"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={managerName}
-              onChange={(e) => setManagerName(e.target.value)}
-              placeholder="Your name (optional)"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setVerificationRequested(false);
-                setVerificationCode("");
-                setVerificationToken(null);
-                setVerificationInlineCode(null);
-              }}
-              type="email"
-              required
-              placeholder="Work email"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
+            <div className="space-y-1.5">
+              <label htmlFor="estate-name" className={labelClass}>
+                Estate / community name
+              </label>
+              <input
+                id="estate-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="organization"
+                placeholder="Sunset Hills Estate"
+                className={inputClass}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="estate-slug" className={labelClass}>
+                URL slug
+              </label>
+              <input
+                id="estate-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                required
+                autoComplete="off"
+                placeholder="sunset-hills"
+                className={inputClass}
+              />
+              <p className="text-xs text-muted-foreground">Used in your estate URL, e.g. sunset-hills</p>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="manager-name" className={labelClass}>
+                Your name <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <input
+                id="manager-name"
+                value={managerName}
+                onChange={(e) => setManagerName(e.target.value)}
+                autoComplete="name"
+                placeholder="Jane Doe"
+                className={inputClass}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="work-email" className={labelClass}>
+                Work email
+              </label>
+              <input
+                id="work-email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setVerificationRequested(false);
+                  setVerificationCode("");
+                  setVerificationToken(null);
+                  setVerificationInlineCode(null);
+                }}
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@estate.com"
+                className={inputClass}
+              />
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -176,14 +216,21 @@ export default function RegisterEstatePage() {
                     </p>
                   </div>
                 ) : null}
-                <div className="flex items-center gap-2">
-                  <input
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value)}
-                    placeholder="Verification code"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <button
+                <div className="space-y-1.5">
+                  <label htmlFor="verification-code" className={labelClass}>
+                    Verification code
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="verification-code"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit code"
+                      className={inputClass}
+                    />
+                    <button
                     type="button"
                     onClick={() => void verifyCode()}
                     disabled={loading || Boolean(verificationToken)}
@@ -191,17 +238,39 @@ export default function RegisterEstatePage() {
                   >
                     {verificationToken ? "Verified" : "Verify"}
                   </button>
+                  </div>
                 </div>
               </div>
             )}
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              required
-              placeholder="Password"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
+            <div className="space-y-1.5">
+              <label htmlFor="estate-password" className={labelClass}>
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="estate-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  placeholder="Create a password"
+                  className={`${inputClass} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-2 flex items-center"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground transition-colors hover:text-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground transition-colors hover:text-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
             {error && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
@@ -217,6 +286,8 @@ export default function RegisterEstatePage() {
           </form>
         </div>
       </div>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

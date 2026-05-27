@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { fetchPlatformPendingEstates, patchPlatformEstate } from "@/lib/estate-api";
 import { isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 
 export default function PlatformPendingPage() {
   const [items, setItems] = useState<
@@ -14,6 +16,7 @@ export default function PlatformPendingPage() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   const load = useCallback(async () => {
     if (!isApiMode()) {
@@ -39,10 +42,13 @@ export default function PlatformPendingPage() {
 
   const act = async (estateId: string, action: "approve" | "reject") => {
     try {
-      await patchPlatformEstate(estateId, { action });
+      const out = await patchPlatformEstate(estateId, { action });
       await load();
+      enqueueNotice("Success", out.message ?? `Estate ${action} completed successfully.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed");
+      const msg = e instanceof Error ? e.message : "Action failed";
+      setError(msg);
+      enqueueNotice("Action failed", msg);
     }
   };
 
@@ -95,6 +101,8 @@ export default function PlatformPendingPage() {
           ))}
         </ul>
       )}
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AlertTriangle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { Select } from "@/components/ui/select";
 import {
   loadIncidents,
@@ -17,6 +18,7 @@ import {
   patchAdminIncident,
 } from "@/lib/estate-api";
 import { isApiMode } from "@/lib/session";
+import { useMessageModals } from "@/lib/use-message-modals";
 
 export default function IncidentDetailPage() {
   const params = useParams();
@@ -27,6 +29,8 @@ export default function IncidentDetailPage() {
   const [draftStatus, setDraftStatus] = useState<IncidentStatus>("Open");
   const [draftUpdate, setDraftUpdate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const { noticeModal, enqueueNotice, dismissNotice } = useMessageModals();
 
   useEffect(() => {
     if (!id) {
@@ -166,6 +170,12 @@ export default function IncidentDetailPage() {
               className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
+          {updateError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {updateError}
+            </div>
+          )}
+
           <Button
             type="button"
             className="bg-gradient-gold shadow-gold hover:opacity-90"
@@ -173,15 +183,19 @@ export default function IncidentDetailPage() {
             onClick={() => {
               if (isApiMode()) {
                 setSaving(true);
+                setUpdateError(null);
                 void (async () => {
                   try {
                     const msg =
                       draftUpdate.trim() ||
                       `Status updated to ${draftStatus} for: ${inc.title}`;
-                    await patchAdminIncident(inc.id, { status: draftStatus, message: msg });
+                    const out = await patchAdminIncident(inc.id, { status: draftStatus, message: msg });
                     const detail = await fetchAdminIncidentDetail(inc.id);
                     setIncident({ ...detail.incident, updates: detail.updates });
                     setDraftUpdate("");
+                    enqueueNotice("Success", out.message);
+                  } catch (e) {
+                    setUpdateError(e instanceof Error ? e.message : "Failed to update incident");
                   } finally {
                     setSaving(false);
                   }
@@ -227,6 +241,8 @@ export default function IncidentDetailPage() {
           )}
         </div>
       </div>
+
+      <NoticeModal notice={noticeModal} onClose={dismissNotice} />
     </div>
   );
 }

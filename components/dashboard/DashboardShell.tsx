@@ -10,6 +10,7 @@ import {
   Bell,
   ChevronDown,
   CreditCard,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -47,6 +48,7 @@ const adminNav: NavItem[] = [
   { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
   { icon: CreditCard, label: "Payments", href: "/dashboard/payments" },
   { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
+  { icon: FileText, label: "Audit Logs", href: "/dashboard/audit-logs" },
   { icon: BarChart3, label: "Reports", href: "/dashboard/reports" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];

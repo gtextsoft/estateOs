@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 
 import { logoutRequest, meRequest } from "@/lib/estate-api";
+import { mustResetLoginPath, userMustResetPassword } from "@/lib/must-reset-password";
 import { clearSession, isApiMode, setSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { PlatformLandingBackground } from "@/components/ui/background-snippets";
@@ -15,6 +16,7 @@ const navItems: { href: string; label: string; exact?: boolean }[] = [
   { href: "/platform", label: "Overview", exact: true },
   { href: "/platform/pending", label: "Pending onboarding" },
   { href: "/platform/estates", label: "All estates" },
+  { href: "/platform/audit-logs", label: "Audit logs" },
 ];
 
 function navActive(pathname: string, href: string, exact?: boolean) {
@@ -39,6 +41,10 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
     }
     try {
       const m = await meRequest();
+      if (userMustResetPassword(m.user)) {
+        router.replace(mustResetLoginPath(pathname || "/platform"));
+        return;
+      }
       const u = m.user as { id: string; role: string; userId?: string; email?: string };
       if (u.role !== "platform_admin") {
         setError(
@@ -57,7 +63,7 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
     } finally {
       setReady(true);
     }
-  }, [router]);
+  }, [pathname, router]);
 
   useEffect(() => {
     void verify();

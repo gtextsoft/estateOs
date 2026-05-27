@@ -244,10 +244,13 @@ export function SignInFormInner({
       <p className="animate-element animate-delay-200 text-muted-foreground">{description}</p>
 
       <form className="space-y-5" onSubmit={onSignIn}>
-        <div className="animate-element animate-delay-300">
-          <label className="text-sm font-medium text-muted-foreground">Email Address</label>
+        <div className="animate-element animate-delay-300 space-y-1.5">
+          <label htmlFor="signin-email" className="text-sm font-medium text-muted-foreground">
+            Email address
+          </label>
           <GlassInputWrapper>
             <input
+              id="signin-email"
               name="email"
               type="email"
               autoComplete="email"
@@ -257,11 +260,14 @@ export function SignInFormInner({
           </GlassInputWrapper>
         </div>
 
-        <div className="animate-element animate-delay-400">
-          <label className="text-sm font-medium text-muted-foreground">Password</label>
+        <div className="animate-element animate-delay-400 space-y-1.5">
+          <label htmlFor="signin-password" className="text-sm font-medium text-muted-foreground">
+            Password
+          </label>
           <GlassInputWrapper>
             <div className="relative">
               <input
+                id="signin-password"
                 name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
@@ -395,13 +401,19 @@ export function SignUpFormInner({
   error,
   loading,
 }: SignUpFormProps) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="animate-element animate-delay-100 text-3xl leading-tight font-semibold sm:text-4xl md:text-5xl">{title}</h1>
       <p className="animate-element animate-delay-200 text-muted-foreground">{description}</p>
 
       <form className="space-y-4" onSubmit={onSignUp}>
-        <div className="animate-element animate-delay-300 flex gap-2">
+        <div className="animate-element animate-delay-300 space-y-1.5">
+          <span id="signup-role-label" className="text-sm font-medium text-muted-foreground">
+            Account type
+          </span>
+          <div className="flex gap-2" role="group" aria-labelledby="signup-role-label">
           <button
             type="button"
             onClick={() => onRoleChange("resident")}
@@ -422,13 +434,17 @@ export function SignUpFormInner({
           >
             Security
           </button>
+          </div>
         </div>
 
-        <div className="animate-element animate-delay-300">
-          <label className="text-sm font-medium text-muted-foreground">Estate slug</label>
-          <div className="mt-1 flex gap-2">
+        <div className="animate-element animate-delay-300 space-y-1.5">
+          <label htmlFor="signup-estate-slug" className="text-sm font-medium text-muted-foreground">
+            Estate slug
+          </label>
+          <div className="flex gap-2">
             <GlassInputWrapper>
               <input
+                id="signup-estate-slug"
                 name="estateSlug"
                 value={estateSlug}
                 onChange={(e) => onEstateSlugChange(e.target.value)}
@@ -448,14 +464,18 @@ export function SignUpFormInner({
           {estateName && <p className="mt-1 text-xs text-emerald-600">Found: {estateName}</p>}
         </div>
 
-        <div className="animate-element animate-delay-400">
-          <label className="text-sm font-medium text-muted-foreground">Email</label>
+        <div className="animate-element animate-delay-400 space-y-1.5">
+          <label htmlFor="signup-email" className="text-sm font-medium text-muted-foreground">
+            Email
+          </label>
           <GlassInputWrapper>
             <input
+              id="signup-email"
               name="email"
               type="email"
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
+              autoComplete="email"
               className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
               placeholder="you@example.com"
               required
@@ -491,16 +511,20 @@ export function SignUpFormInner({
                 </p>
               </div>
             ) : null}
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Verification code</label>
-              <div className="mt-1 flex gap-2">
+            <div className="space-y-1.5">
+              <label htmlFor="signup-verification-code" className="text-sm font-medium text-muted-foreground">
+                Verification code
+              </label>
+              <div className="flex gap-2">
                 <GlassInputWrapper>
                   <input
+                    id="signup-verification-code"
                     value={verificationCode}
                     onChange={(e) => onVerificationCodeChange(e.target.value)}
                     className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
                     placeholder="Enter 6-digit code"
                     inputMode="numeric"
+                    autoComplete="one-time-code"
                   />
                 </GlassInputWrapper>
                 <button
@@ -516,41 +540,68 @@ export function SignUpFormInner({
           </div>
         )}
 
-        <div className="animate-element animate-delay-400">
-          <label className="text-sm font-medium text-muted-foreground">Password</label>
+        <div className="animate-element animate-delay-400 space-y-1.5">
+          <label htmlFor="signup-password" className="text-sm font-medium text-muted-foreground">
+            Password
+          </label>
           <GlassInputWrapper>
-            <input
-              name="password"
-              type="password"
-              value={password}
-              onChange={(e) => onPasswordChange(e.target.value)}
-              className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
-              placeholder="Create a password"
-              required
-            />
+            <div className="relative">
+              <input
+                id="signup-password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => onPasswordChange(e.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-2xl bg-transparent p-4 pr-12 text-sm focus:outline-none"
+                placeholder="Create a password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-3 flex items-center"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5 text-muted-foreground transition-colors hover:text-foreground" />
+                ) : (
+                  <Eye className="h-5 w-5 text-muted-foreground transition-colors hover:text-foreground" />
+                )}
+              </button>
+            </div>
           </GlassInputWrapper>
         </div>
 
-        <div className="animate-element animate-delay-500">
-          <label className="text-sm font-medium text-muted-foreground">Full legal name</label>
+        <div className="animate-element animate-delay-500 space-y-1.5">
+          <label htmlFor="signup-full-name" className="text-sm font-medium text-muted-foreground">
+            Full legal name
+          </label>
           <GlassInputWrapper>
             <input
+              id="signup-full-name"
               name="fullName"
               value={fullName}
               onChange={(e) => onFullNameChange(e.target.value)}
+              autoComplete="name"
               className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
               required
             />
           </GlassInputWrapper>
         </div>
 
-        <div className="animate-element animate-delay-500">
-          <label className="text-sm font-medium text-muted-foreground">Phone</label>
+        <div className="animate-element animate-delay-500 space-y-1.5">
+          <label htmlFor="signup-phone" className="text-sm font-medium text-muted-foreground">
+            Phone <span className="font-normal">(optional)</span>
+          </label>
           <GlassInputWrapper>
             <input
+              id="signup-phone"
               name="phone"
+              type="tel"
               value={phone}
               onChange={(e) => onPhoneChange(e.target.value)}
+              autoComplete="tel"
               className="w-full rounded-2xl bg-transparent p-4 text-sm focus:outline-none"
               placeholder="Optional"
             />
@@ -559,10 +610,13 @@ export function SignUpFormInner({
 
         {role === "resident" && (
           <>
-            <div className="animate-element animate-delay-500">
-              <label className="text-sm font-medium text-muted-foreground">Unit</label>
+            <div className="animate-element animate-delay-500 space-y-1.5">
+              <label htmlFor="signup-unit" className="text-sm font-medium text-muted-foreground">
+                Unit
+              </label>
               <GlassInputWrapper>
                 <input
+                  id="signup-unit"
                   name="unit"
                   value={unit}
                   onChange={(e) => onUnitChange(e.target.value)}
@@ -573,10 +627,13 @@ export function SignUpFormInner({
               </GlassInputWrapper>
             </div>
             <div className="animate-element animate-delay-500 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Building</label>
+              <div className="space-y-1.5">
+                <label htmlFor="signup-building" className="text-sm font-medium text-muted-foreground">
+                  Building <span className="font-normal">(optional)</span>
+                </label>
                 <GlassInputWrapper>
                   <input
+                    id="signup-building"
                     name="building"
                     value={building}
                     onChange={(e) => onBuildingChange(e.target.value)}
@@ -585,10 +642,13 @@ export function SignUpFormInner({
                   />
                 </GlassInputWrapper>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Block</label>
+              <div className="space-y-1.5">
+                <label htmlFor="signup-block" className="text-sm font-medium text-muted-foreground">
+                  Block <span className="font-normal">(optional)</span>
+                </label>
                 <GlassInputWrapper>
                   <input
+                    id="signup-block"
                     name="block"
                     value={block}
                     onChange={(e) => onBlockChange(e.target.value)}
@@ -601,10 +661,13 @@ export function SignUpFormInner({
           </>
         )}
 
-        <div className="animate-element animate-delay-600">
-          <label className="text-sm font-medium text-muted-foreground">Notes for estate manager</label>
+        <div className="animate-element animate-delay-600 space-y-1.5">
+          <label htmlFor="signup-notes" className="text-sm font-medium text-muted-foreground">
+            Notes for estate manager <span className="font-normal">(optional)</span>
+          </label>
           <GlassInputWrapper>
             <textarea
+              id="signup-notes"
               name="notes"
               value={notes}
               onChange={(e) => onNotesChange(e.target.value)}

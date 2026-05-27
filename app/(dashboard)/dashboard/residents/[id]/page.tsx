@@ -133,7 +133,7 @@ export default function ResidentDetailPage() {
 
   if (!r) {
     return (
-      <div className="space-y-2">
+      <div className="flex flex-col items-center justify-center space-y-2">
         <h1 className="font-display text-2xl font-bold text-foreground">
           Resident not found
         </h1>
