@@ -6,10 +6,12 @@ export const LOCAL_DEMO_RESIDENT_ID = "res_adaeze_okafor";
 const USER_ID_KEY = "estateos_user_id";
 const ROLE_KEY = "estateos_role_client";
 const RESIDENT_ID_KEY = "estateos_resident_mongo_id";
+const TOKEN_KEY = "estateos_bearer_token";
 
 /**
- * Cookie-first SPA: auth is the httpOnly `estateos_token` cookie (+ CSRF cookie).
- * Client stores only non-secret routing hints (user id, role, resident id).
+ * Auth: httpOnly cookie when frontend and API share origin (local dev).
+ * Cross-origin deploy (Vercel + Render): JWT in sessionStorage + Authorization header.
+ * Client also stores non-secret routing hints (user id, role, resident id).
  */
 
 export function getApiBase(): string {
@@ -25,23 +27,24 @@ export function requireApiInProduction(): boolean {
   return process.env.NEXT_PUBLIC_REQUIRE_API === "true" || process.env.NODE_ENV === "production";
 }
 
-/** @deprecated Token is not stored client-side; returns null. Kept for gradual migration. */
 export function getStoredToken(): string | null {
-  return null;
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function setSession(input: { userId: string; role: string; residentId?: string; token?: string }) {
-  void input.token;
   sessionStorage.setItem(USER_ID_KEY, input.userId);
   sessionStorage.setItem(ROLE_KEY, input.role);
   if (input.residentId) sessionStorage.setItem(RESIDENT_ID_KEY, input.residentId);
   else sessionStorage.removeItem(RESIDENT_ID_KEY);
+  if (input.token) sessionStorage.setItem(TOKEN_KEY, input.token);
 }
 
 export function clearSession() {
   sessionStorage.removeItem(USER_ID_KEY);
   sessionStorage.removeItem(ROLE_KEY);
   sessionStorage.removeItem(RESIDENT_ID_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 }
 
 export function getCurrentUserId(): string {

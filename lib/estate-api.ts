@@ -14,7 +14,7 @@ import type {
 import type { EmergencyAlert } from "@/components/dashboard/emergencyStore";
 
 import { mustResetLoginPath } from "./must-reset-password";
-import { clearSession, getApiBase } from "./session";
+import { clearSession, getApiBase, getStoredToken } from "./session";
 import { API_ROUTES } from "./api-routes";
 
 const CSRF_COOKIE = "estateos_csrf";
@@ -57,6 +57,10 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
     headers.set("Content-Type", "application/json");
   }
   const method = (init.method ?? "GET").toUpperCase();
+  const bearer = getStoredToken();
+  if (bearer && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${bearer}`);
+  }
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
     const csrf = getCsrfTokenFromCookie();
     if (csrf) headers.set(CSRF_HEADER, csrf);

@@ -158,6 +158,7 @@ export function AuthClient() {
         userId: res.userId,
         role: res.role,
         residentId: res.residentId,
+        token: res.token,
       });
       document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       const nextParam =
@@ -194,6 +195,7 @@ export function AuthClient() {
         userId: res.userId,
         role: res.role,
         residentId: res.userId,
+        token: res.token,
       });
       document.cookie = `estateos_role=resident; path=/; max-age=${60 * 60 * 24 * 30}`;
       router.push("/residents");
@@ -249,6 +251,7 @@ export function AuthClient() {
         userId: res.userId,
         role: res.role,
         residentId: res.residentId,
+        token: res.token,
       });
       document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}`;
       router.push("/pending-kyc");

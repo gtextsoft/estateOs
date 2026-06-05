@@ -52,7 +52,7 @@ export default function RegisterEstatePage() {
         managerName: managerName.trim() || undefined,
         verificationToken,
       });
-      setSession({ userId: res.userId, role: res.role });
+      setSession({ userId: res.userId, role: res.role, token: res.token });
       document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}`;
       router.push("/pending-estate");
     } catch (err) {
