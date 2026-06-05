@@ -26,6 +26,7 @@ import {
   meRequest,
 } from "@/lib/estate-api";
 import { userMustResetPassword } from "@/lib/must-reset-password";
+import { resolvePostLoginPath } from "@/lib/auth-routing";
 import { isApiMode, setSession } from "@/lib/session";
 import { useMessageModals } from "@/lib/use-message-modals";
 
@@ -52,25 +53,6 @@ const SAMPLE_TESTIMONIALS: Testimonial[] = [
     text: "I've tried many platforms, but this one stands out. Intuitive, reliable, and genuinely helpful for productivity.",
   },
 ];
-
-function routeAfterLogin(input: {
-  role: string;
-  kycStatus?: string;
-  estateStatus?: string;
-}) {
-  if (input.role === "platform_admin") return "/platform";
-  if (input.role === "manager" && input.estateStatus === "pending") return "/pending-estate";
-  if (
-    (input.role === "resident" || input.role === "guard") &&
-    input.kycStatus === "submitted"
-  ) {
-    return "/pending-kyc";
-  }
-  if (input.role === "resident") return "/residents";
-  if (input.role === "guard") return "/security";
-  if (input.role === "manager") return "/dashboard";
-  return "/login";
-}
 
 const MUST_RESET_PROMPT =
   "Your account was created by an admin. Set a new password before you can use EstateOS.";
@@ -177,17 +159,15 @@ export function AuthClient() {
         role: res.role,
         residentId: res.residentId,
       });
-      document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}`;
+      document.cookie = `estateos_role=${res.role}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       const nextParam =
         typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
-      const dest =
-        nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
-          ? nextParam
-          : routeAfterLogin({
-              role: res.role,
-              kycStatus: res.kycStatus,
-              estateStatus: res.estateStatus,
-            });
+      const dest = resolvePostLoginPath({
+        role: res.role,
+        kycStatus: res.kycStatus,
+        estateStatus: res.estateStatus,
+        next: nextParam,
+      });
       router.push(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");

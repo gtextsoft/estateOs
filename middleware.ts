@@ -1,28 +1,34 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const AUTH_COOKIE = "estateos_token";
+import { redirectIfWrongRoleArea } from "@/lib/auth-routing";
+
+/** httpOnly token lives on the API host (Render); role cookie is set on the frontend after login. */
+const SESSION_COOKIES = ["estateos_token", "estateos_role"] as const;
 
 const PROTECTED_PREFIXES = ["/dashboard", "/platform", "/residents", "/security", "/pending-kyc", "/pending-estate"];
-
-const AUTH_ROUTES = ["/login", "/signup", "/register-estate"];
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function isAuthRoute(pathname: string) {
-  return AUTH_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function hasSession(request: NextRequest): boolean {
+  return SESSION_COOKIES.some((name) => !!request.cookies.get(name)?.value);
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasSession = !!request.cookies.get(AUTH_COOKIE)?.value;
 
-  if (isProtectedPath(pathname) && !hasSession) {
+  if (isProtectedPath(pathname) && !hasSession(request)) {
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname);
     return NextResponse.redirect(login);
+  }
+
+  const role = request.cookies.get("estateos_role")?.value;
+  const roleRedirect = redirectIfWrongRoleArea(pathname, role);
+  if (roleRedirect && roleRedirect !== pathname) {
+    return NextResponse.redirect(new URL(roleRedirect, request.url));
   }
 
   return NextResponse.next();
