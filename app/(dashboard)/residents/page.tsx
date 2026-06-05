@@ -433,13 +433,14 @@ export default function ResidentPortalPage() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto grid lg:grid-cols-[1fr_360px] gap-6">
-        <div className="flex flex-col space-y-6">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_min(360px,100%)] lg:items-start">
+        <div className="flex min-w-0 flex-col space-y-6">
           <div
             id="home"
-            className="scroll-mt-6 rounded-2xl border border-border bg-gradient-cream p-6 flex items-center justify-between gap-6"
+            className="scroll-mt-6 flex flex-col gap-4 rounded-2xl border border-border bg-gradient-cream p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6"
           >
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">
                 Good afternoon
               </div>
@@ -491,7 +492,7 @@ export default function ResidentPortalPage() {
               </div>
             </div>
             <Button
-              className="bg-gradient-gold shadow-gold hover:opacity-90"
+              className="w-full shrink-0 bg-gradient-gold shadow-gold hover:opacity-90 sm:w-auto"
               onClick={() => setCreateOpen(true)}
               disabled={resident?.status === "Inactive"}
             >
@@ -538,10 +539,11 @@ export default function ResidentPortalPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") setSelectedPass(p);
                   }}
-                  className="w-full text-left bg-background rounded-xl border border-border p-4 shadow-soft hover:shadow-card transition-shadow cursor-pointer"
+                  className="w-full cursor-pointer rounded-xl border border-border bg-background p-4 text-left shadow-soft transition-shadow hover:shadow-card"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="h-11 w-11 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center sm:gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                       {p.passType === "permanent" ? (
                         <User className="h-5 w-5 text-primary" />
                       ) : p.passType === "service" ? (
@@ -568,10 +570,16 @@ export default function ResidentPortalPage() {
                       </div>
                     </div>
 
-                    <div className="text-xs font-mono text-muted-foreground shrink-0">
+                    <div className="text-xs font-mono text-muted-foreground sm:hidden">
                       ID: {p.id}
                     </div>
-                    <QrCode className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 sm:justify-end sm:shrink-0">
+                    <div className="hidden text-xs font-mono text-muted-foreground sm:block">
+                      ID: {p.id}
+                    </div>
+                    <QrCode className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
 
                     <div className="relative shrink-0" data-pass-menu-root>
                       <button
@@ -625,6 +633,7 @@ export default function ResidentPortalPage() {
                         </div>
                       )}
                     </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -632,7 +641,7 @@ export default function ResidentPortalPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6 lg:sticky lg:top-0 lg:self-start">
           <div
             id="emergency"
             className="scroll-mt-6 bg-card rounded-xl border border-border shadow-soft p-6 text-center"
@@ -746,8 +755,9 @@ export default function ResidentPortalPage() {
             </div>
           </div>
         </div>
-      </div>
-      <div className="max-w-6xl mx-auto mt-14 pt-2 space-y-6">
+        </div>
+
+        <div className="space-y-6 pt-2">
         {/* <div className="rounded-xl border border-border/70 bg-gradient-cream px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
             Overview details
@@ -760,17 +770,15 @@ export default function ResidentPortalPage() {
           id="payments"
           className="scroll-mt-6 h-full bg-card rounded-xl border border-border shadow-soft"
         >
-          <div className="p-5 border-b border-border flex items-center justify-between gap-3">
-            <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="min-w-0">
               <h3 className="font-display text-lg font-semibold text-foreground">
                 Payments
               </h3>
-              <span className="text-xs text-muted-foreground">
-                {payments.length} request{payments.length === 1 ? "" : "s"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Showing first {Math.min(OVERVIEW_TABLE_LIMIT, paymentPreview.length)}
-              </span>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {payments.length} request{payments.length === 1 ? "" : "s"} · showing{" "}
+                {Math.min(OVERVIEW_TABLE_LIMIT, paymentPreview.length)}
+              </p>
             </div>
             <Link
               href="/residents/payments"
@@ -833,17 +841,15 @@ export default function ResidentPortalPage() {
           id="incidents"
           className="scroll-mt-6 bg-card rounded-xl border border-border shadow-soft"
         >
-          <div className="p-5 border-b border-border flex items-center justify-between gap-3">
-            <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="min-w-0">
               <h3 className="font-display text-lg font-semibold text-foreground">
                 Incidents
               </h3>
-              <span className="text-xs text-muted-foreground">
-                {incidents.length} incident{incidents.length === 1 ? "" : "s"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Showing first {Math.min(OVERVIEW_TABLE_LIMIT, incidentPreview.length)}
-              </span>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {incidents.length} incident{incidents.length === 1 ? "" : "s"} · showing{" "}
+                {Math.min(OVERVIEW_TABLE_LIMIT, incidentPreview.length)}
+              </p>
             </div>
             <Link
               href="/residents/incidents"

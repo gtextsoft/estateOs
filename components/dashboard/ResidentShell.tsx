@@ -198,9 +198,9 @@ export function ResidentShell({
   }
 
   return (
-    <div className="min-h-dvh bg-background flex">
+    <div className="flex h-dvh min-h-dvh overflow-hidden bg-background">
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 lg:translate-x-0 lg:sticky lg:top-0 lg:h-dvh flex flex-col overflow-hidden ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-full w-64 shrink-0 flex-col overflow-hidden border-r border-border bg-card transition-transform duration-200 lg:static lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -266,8 +266,8 @@ export function ResidentShell({
         />
       )}
 
-      <main className="flex-1 min-w-0 flex flex-col min-h-dvh">
-        <header className="h-16 border-b border-border flex items-center justify-between gap-3 px-4 sm:px-6 shrink-0">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button type="button" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
               <Menu className="h-5 w-5" />
@@ -389,7 +389,7 @@ export function ResidentShell({
             </div>
           </div>
         </header>
-        <div className="flex-1 overflow-x-hidden p-4 sm:p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">{children}</div>
       </main>
     </div>
   );
