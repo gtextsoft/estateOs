@@ -18,7 +18,7 @@ export function SecurityShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const title = navItems.find((n) => n.href === pathname)?.label ?? "Security";
-  const { ready, error, signOut, isEnabled } = useRequireSession(["guard"]);
+  const { ready, error, signOut, isEnabled, retrySession } = useRequireSession(["guard"]);
 
   if (!ready) {
     return (
@@ -35,7 +35,12 @@ export function SecurityShell({ children }: { children: React.ReactNode }) {
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
-          <Button onClick={() => void signOut()}>Sign out</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => retrySession()}>
+              Try again
+            </Button>
+            <Button onClick={() => void signOut()}>Sign out</Button>
+          </div>
         </div>
       </div>
     );

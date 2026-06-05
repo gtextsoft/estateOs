@@ -60,7 +60,7 @@ export function DashboardShell({
   children: React.ReactNode;
   roleLabel: string;
 }) {
-  const { ready, error, signOut, isEnabled, user: sessionUser } = useRequireSession(["manager"]);
+  const { ready, error, signOut, isEnabled, user: sessionUser, retrySession } = useRequireSession(["manager"]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -188,7 +188,12 @@ export function DashboardShell({
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
-          <Button onClick={() => void signOut()}>Sign out</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => retrySession()}>
+              Try again
+            </Button>
+            <Button onClick={() => void signOut()}>Sign out</Button>
+          </div>
         </div>
       </div>
     );

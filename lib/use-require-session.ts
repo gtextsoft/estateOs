@@ -5,7 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { ApiHttpError, logoutRequest, meRequest } from "@/lib/estate-api";
 import { mustResetLoginPath, userMustResetPassword } from "@/lib/must-reset-password";
-import { clearSession, isApiMode, requireApiInProduction, setSession } from "@/lib/session";
+import { clearSession, getClientRole, isApiMode, requireApiInProduction, setSession } from "@/lib/session";
+
+function hasClientRoleCookie(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith("estateos_role="));
+}
 
 type SessionRole = "resident" | "guard" | "manager" | "platform_admin";
 type SessionUser = {
@@ -23,9 +28,54 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const isEnabled = useMemo(() => isApiMode(), []);
   const allowedRolesKey = useMemo(() => allowedRoles.slice().sort().join("|"), [allowedRoles]);
+
+  const verifySession = async () => {
+    setError(null);
+    try {
+      const session = await meRequest();
+      if (userMustResetPassword(session.user)) {
+        router.replace(mustResetLoginPath(pathname || "/"));
+        return;
+      }
+      const role = session.user.role as SessionRole;
+      if (!allowedRoles.includes(role)) {
+        setError(`This page requires ${allowedRoles.join(" or ")} access. You are signed in as ${role}.`);
+        return;
+      }
+      setSession({
+        userId: session.user.userId ?? session.user.id,
+        role,
+        residentId: session.user.role === "resident" ? session.user.id : undefined,
+      });
+      setUser(session.user as SessionUser);
+    } catch (err) {
+      if (err instanceof ApiHttpError && err.code === "PASSWORD_RESET_REQUIRED") {
+        router.replace(mustResetLoginPath(pathname || "/"));
+        return;
+      }
+      if (err instanceof ApiHttpError && err.status === 401) {
+        if (hasClientRoleCookie() || getClientRole()) {
+          setError(
+            "Session could not be verified with the API. Try again — if this keeps happening, check that cookies are allowed for the API domain.",
+          );
+          return;
+        }
+        clearSession();
+        document.cookie = "estateos_role=; path=/; max-age=0";
+        router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+        return;
+      }
+      setError(
+        err instanceof Error
+          ? `Could not verify session right now: ${err.message}`
+          : "Could not verify session right now.",
+      );
+    }
+  };
 
   useEffect(() => {
     if (!isEnabled) {
@@ -37,39 +87,11 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
       return;
     }
     void (async () => {
-      try {
-        const session = await meRequest();
-        if (userMustResetPassword(session.user)) {
-          router.replace(mustResetLoginPath(pathname || "/"));
-          return;
-        }
-        const role = session.user.role as SessionRole;
-        if (!allowedRoles.includes(role)) {
-          setError(`This page requires ${allowedRoles.join(" or ")} access. You are signed in as ${role}.`);
-          setReady(true);
-          return;
-        }
-        setSession({
-          userId: session.user.userId ?? session.user.id,
-          role,
-          residentId: session.user.role === "resident" ? session.user.id : undefined,
-        });
-        setUser(session.user as SessionUser);
-      } catch (err) {
-        if (err instanceof ApiHttpError && err.status === 401) {
-          router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
-          return;
-        }
-        setError(
-          err instanceof Error
-            ? `Could not verify session right now: ${err.message}`
-            : "Could not verify session right now.",
-        );
-      } finally {
-        setReady(true);
-      }
+      await verifySession();
+      setReady(true);
     })();
-  }, [allowedRolesKey, isEnabled, pathname, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- retryKey triggers re-verify
+  }, [allowedRolesKey, isEnabled, pathname, router, retryKey]);
 
   const signOut = async () => {
     try {
@@ -82,5 +104,5 @@ export function useRequireSession(allowedRoles: SessionRole[]) {
     window.location.href = "/login";
   };
 
-  return { ready, error, signOut, isEnabled, user };
+  return { ready, error, signOut, isEnabled, user, retrySession: () => setRetryKey((k) => k + 1) };
 }

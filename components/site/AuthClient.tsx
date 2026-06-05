@@ -168,7 +168,9 @@ export function AuthClient() {
         estateStatus: res.estateStatus,
         next: nextParam,
       });
-      router.push(dest);
+      // Full navigation so middleware sees estateos_role and /me runs on a fresh page load
+      window.location.assign(dest);
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {

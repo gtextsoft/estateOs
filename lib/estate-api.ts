@@ -69,14 +69,8 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
     cache: "no-store",
   });
 
-  if (
-    res.status === 401 &&
-    typeof window !== "undefined" &&
-    window.location.pathname !== "/login"
-  ) {
-    clearSession();
-    window.location.href = "/login";
-  }
+  // Do not auto-redirect on 401 here — callers (useRequireSession, login) decide.
+  // A global redirect caused false logouts after successful login when any API call failed.
   if (res.status === 403 && typeof window !== "undefined") {
     try {
       const text = await res.clone().text();
